@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # IDE and editor files
-.vscode/
+# .vscode/
 
 # System files
 .DS_Store

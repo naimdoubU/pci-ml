@@ -1,0 +1,9 @@
+{
+    "files.exclude": {
+        "**/.venv": true,
+        "**/uv.lock": true,
+        "**/.python-version": true,
+        "**/pyproject.toml": true,
+        "**/.vscode": true,
+    }
+}
