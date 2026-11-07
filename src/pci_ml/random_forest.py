@@ -3,7 +3,8 @@
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import GroupKFold, ParameterSampler, cross_validate
+from sklearn.model_selection import (GroupKFold, ParameterSampler,
+                                     cross_val_predict, cross_validate)
 
 
 def _max_depth(value):
@@ -36,8 +37,9 @@ def tune_random_forest(X_train, y_train, groups, param_distributions,
                        n_iter, cv_splits, random_state, progress=None):
     """Search Random Forest hyperparameters with GroupKFold cross-validation.
 
-    Returns the best model, its parameters, and mean CV MAE/RMSE/R2.
-    ``progress(done, total, best_mae)`` is called after each candidate.
+    Returns the best model, its parameters, mean per-fold CV scores, and
+    pooled out-of-fold CV scores. ``progress(done, total, best_mae)`` is
+    called after each candidate.
     """
     cv = GroupKFold(n_splits=int(cv_splits))
     sampler = ParameterSampler(
@@ -77,7 +79,25 @@ def tune_random_forest(X_train, y_train, groups, param_distributions,
 
     model = RandomForestRegressor(random_state=random_state, **best_params)
     model.fit(X_train, y_train)
-    return {"model": model, "params": best_params, "cv": best_scores}
+
+    oof_predictions = cross_val_predict(
+        RandomForestRegressor(random_state=random_state, **best_params),
+        X_train, y_train,
+        groups=groups,
+        cv=cv,
+        n_jobs=-1,
+    )
+    pooled_scores = {
+        "mae": float(mean_absolute_error(y_train, oof_predictions)),
+        "rmse": float(np.sqrt(mean_squared_error(y_train, oof_predictions))),
+        "r2": float(r2_score(y_train, oof_predictions)),
+    }
+    return {
+        "model": model,
+        "params": best_params,
+        "cv": best_scores,
+        "cv_pooled": pooled_scores,
+    }
 
 
 def evaluate_random_forest(model, X, y):
