@@ -65,6 +65,52 @@ class StaticPanel:
         return dict(self._values)
 
 
+class ParamPanel:
+    """Holds a group of numeric parameters."""
+
+    def __init__(self, defaults, specs):
+        style = {"description_width": "110px"}
+        box = wg.Layout(width="180px", margin="0 8px 0 0")
+        self._widgets = {}
+
+        for key, spec in specs.items():
+            widget_cls = wg.IntText if spec["type"] == "int" else wg.FloatText
+            self._widgets[key] = widget_cls(
+                value=defaults[key],
+                description=spec["description"],
+                style=style,
+                layout=box,
+            )
+
+        self.widget = wg.VBox([
+            wg.HBox(list(self._widgets.values()),
+                    layout=wg.Layout(align_items="flex-start", flex_flow="row wrap")),
+        ], layout=wg.Layout(align_items="flex-start"))
+
+    def values(self):
+        """Return a plain snapshot of the current panel values."""
+        result = {}
+        for key, widget in self._widgets.items():
+            result[key] = int(widget.value) if isinstance(widget, wg.IntText) else float(widget.value)
+        return result
+
+
+def build_param_panel(defaults, specs, title, export=False):
+    """Build and display a numeric parameter panel; return it for snapshotting."""
+    if export:
+        values = {}
+        for key, spec in specs.items():
+            values[key] = int(defaults[key]) if spec["type"] == "int" else float(defaults[key])
+        print(title)
+        for key, spec in specs.items():
+            print(f"- {spec['label']:<18}: {values[key]}")
+        return StaticPanel(values)
+
+    panel = ParamPanel(defaults, specs)
+    display(panel.widget)
+    return panel
+
+
 def build_panel(datasets, defaults, on_file_change=None, export=False):
     """Build and display the control panel; return it for snapshotting.
 
