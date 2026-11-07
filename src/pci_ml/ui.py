@@ -8,14 +8,15 @@ class ControlPanel:
     """Holds the dataset dropdown and the split parameters."""
 
     def __init__(self, datasets, defaults, on_file_change=None):
-        style = {"description_width": "100px"}
-        box = wg.Layout(width="180px", margin="0 15px")
+        style = {"description_width": "110px"}
+        box = wg.Layout(width="180px", margin="0 8px 0 0")
 
         self.file = wg.Dropdown(
             options=datasets,
             value=defaults["file"] or (datasets[0] if datasets else None),
             description="Pilih file :",
-            layout=wg.Layout(width="400px"),
+            style=style,
+            layout=wg.Layout(width="400px", margin="0 0 6px 0"),
         )
         self.n_seed = wg.IntText(value=defaults["n_seed"], description="Jumlah seed:",
                                  style=style, layout=box)
@@ -32,8 +33,8 @@ class ControlPanel:
         self.widget = wg.VBox([
             self.file,
             wg.HBox([self.n_seed, self.test_size, self.share_tol, self.pci_min],
-                    layout=wg.Layout(justify_content="center", flex_flow="row wrap")),
-        ])
+                    layout=wg.Layout(align_items="flex-start", flex_flow="row wrap")),
+        ], layout=wg.Layout(align_items="flex-start"))
 
     def _file_changed(self, change):
         if self._on_file_change is not None:
@@ -51,9 +52,11 @@ class ControlPanel:
 
 
 def build_panel(datasets, defaults, on_file_change=None):
-    """Build and display the control panel; return it for snapshotting."""
+    """Build and display the control panel; return it for snapshotting.
+
+    The caller triggers the initial preview after creating its output
+    handle, so the panel appears above that preview.
+    """
     panel = ControlPanel(datasets, defaults, on_file_change=on_file_change)
     display(panel.widget)
-    if on_file_change is not None:
-        on_file_change(panel.file.value)
     return panel

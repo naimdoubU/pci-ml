@@ -34,7 +34,7 @@ def clean_data(df):
     df = df.drop(columns=[AREA])
     return df, features
 
-def seed_search(df, features, params):
+def seed_search(df, features, params, progress=None):
     n_seed = int(params["n_seed"])
     test_size = params["test_size"]
     tol = params["share_tol"]
@@ -46,10 +46,13 @@ def seed_search(df, features, params):
 
     best_gap, best_seed, best_idx = None, None, None
 
-    # Wrap range with tqdm and store it as pbar so we can update the suffix
-    pbar = tqdm(range(n_seed), desc="Mencari Seeds")
-    
+    # Use the callback when provided, otherwise keep the tqdm progress bar
+    pbar = tqdm(range(n_seed), desc="Mencari Seeds") if progress is None else range(n_seed)
+
     for seed in pbar:
+        if progress is not None:
+            progress(seed, n_seed, best_gap)
+
         gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
         train_idx, test_idx = next(gss.split(df, groups=df[ROAD_ID]))
 
@@ -68,10 +71,14 @@ def seed_search(df, features, params):
         
         if best_gap is None or gap < best_gap:
             best_gap, best_seed, best_idx = gap, seed, (train_idx, test_idx)
-            
+
             # This updates the progress bar to show the latest best gap
-            pbar.set_postfix({"Best Gap": f"{best_gap:.4f}"})
-        
+            if progress is None:
+                pbar.set_postfix({"Best Gap": f"{best_gap:.4f}"})
+
+    if progress is not None:
+        progress(n_seed, n_seed, best_gap)
+
     if best_seed is None:
         raise ValueError("No seed passed the criteria.")
     return best_idx[0], best_idx[1], best_seed, float(best_gap)
@@ -102,8 +109,8 @@ def save_checkpoint(train_df, test_df, features, filename, params, seed, gap,
         json.dump(meta, f, indent=2)
     return out_dir
 
-def split_data(df, features, filename, params):
-    train_idx, test_idx, seed, gap = seed_search(df, features, params)
+def split_data(df, features, filename, params, progress=None):
+    train_idx, test_idx, seed, gap = seed_search(df, features, params, progress=progress)
     train_df = df.iloc[train_idx].copy()
     test_df = df.iloc[test_idx].copy()
 
@@ -114,7 +121,7 @@ def split_data(df, features, filename, params):
         f"Train: {len(train_df)} rows ({len(train_df) / len(df):.2%}) | "
         f"Test: {len(test_df)} rows ({len(test_df) / len(df):.2%})\n"
         f"Roads: {train_df[ROAD_ID].nunique()} train | {test_df[ROAD_ID].nunique()} test\n"
-        f"Saved to: {out_dir}"
+        f'Saved to: "{out_dir}"'
     )
     return {"train": train_df, "test": test_df, "features": features,
             "seed": seed, "gap": gap, "summary": summary}
@@ -125,19 +132,6 @@ def list_checkpoints(filename, out_root=data_dir):
         return []
     return [p.name for p in base.iterdir() if p.is_dir() and (p / "meta.json").exists()]
 
-def checkpoint_options(filename, out_root=data_dir):
-    base = Path(out_root) / Path(filename).stem
-    rows = []
-    for tag in tqdm(list_checkpoints(filename, out_root), desc="Loading Checkpoints", leave=False):
-        with open(base / tag / "meta.json", encoding="utf-8") as f:
-            m = json.load(f)
-        p = m["params"]
-        label = (f"{Path(m['source_file']).stem} | {m['created_at']} | seed {m['seed']} | gap {m['gap']:.4f} | "
-                 f"test {p['test_size']} | tol {p['share_tol']} | pci_min {p['pci_min']}")
-        rows.append((m["created_at"], label, tag))
-    rows.sort(reverse=True)                      # newest first
-    return [(label, tag) for _, label, tag in rows]
-
 def load_checkpoint(filename, tag, out_root=data_dir):
     out_dir = Path(out_root) / Path(filename).stem / tag
     train_df = pd.read_csv(out_dir / "train.csv")
@@ -147,7 +141,13 @@ def load_checkpoint(filename, tag, out_root=data_dir):
     return train_df, test_df, meta["features"], meta
 
 def latest_checkpoint(filename, out_root=data_dir):
-    options = checkpoint_options(filename, out_root)
-    if not options:
+    tags = list_checkpoints(filename, out_root)
+    if not tags:
         raise FileNotFoundError("run the split first")
-    return options[0][1]
+    base = Path(out_root) / Path(filename).stem
+
+    def created_at(tag):
+        with open(base / tag / "meta.json", encoding="utf-8") as f:
+            return json.load(f)["created_at"]
+
+    return max(tags, key=created_at)
