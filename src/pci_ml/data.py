@@ -4,7 +4,6 @@ from datetime import datetime
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from pathlib import Path
-from tqdm.auto import tqdm
 
 data_dir = Path(__file__).resolve().parents[2] / "datasets"
 PCI, ROAD_ID, AREA = "PCI", "ROAD_ID", "SEGMENT_AREA"
@@ -34,7 +33,7 @@ def clean_data(df):
     df = df.drop(columns=[AREA])
     return df, features
 
-def seed_search(df, features, params, progress=None):
+def seed_search(df, features, params, progress):
     n_seed = int(params["n_seed"])
     test_size = params["test_size"]
     tol = params["share_tol"]
@@ -46,38 +45,31 @@ def seed_search(df, features, params, progress=None):
 
     best_gap, best_seed, best_idx = None, None, None
 
-    # Use the callback when provided, otherwise keep the tqdm progress bar
-    pbar = tqdm(range(n_seed), desc="Mencari Seeds") if progress is None else range(n_seed)
-
-    for seed in pbar:
-        if progress is not None:
+    for seed in range(n_seed):
+        try:
             progress(seed, n_seed, best_gap)
 
-        gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
-        train_idx, test_idx = next(gss.split(df, groups=df[ROAD_ID]))
+            gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
+            train_idx, test_idx = next(gss.split(df, groups=df[ROAD_ID]))
 
-        share = len(test_idx) / len(df)
-        if not (test_size - tol) <= share <= (test_size + tol):
-            continue
+            share = len(test_idx) / len(df)
+            if not (test_size - tol) <= share <= (test_size + tol):
+                continue
 
-        if (~nonzero[train_idx].any(axis=0) & nonzero[test_idx].any(axis=0)).any():
-            continue
+            if (~nonzero[train_idx].any(axis=0) & nonzero[test_idx].any(axis=0)).any():
+                continue
 
-        y_train, y_test = pci_values[train_idx], pci_values[test_idx]
-        if y_test.min() > pci_min:
-            continue
+            y_train, y_test = pci_values[train_idx], pci_values[test_idx]
+            if y_test.min() > pci_min:
+                continue
 
-        gap = abs(y_train.mean() - y_test.mean()) + abs(y_train.std(ddof=1) - y_test.std(ddof=1))
-        
-        if best_gap is None or gap < best_gap:
-            best_gap, best_seed, best_idx = gap, seed, (train_idx, test_idx)
+            gap = abs(y_train.mean() - y_test.mean()) + abs(y_train.std(ddof=1) - y_test.std(ddof=1))
 
-            # This updates the progress bar to show the latest best gap
-            if progress is None:
-                pbar.set_postfix({"Best Gap": f"{best_gap:.4f}"})
-
-    if progress is not None:
-        progress(n_seed, n_seed, best_gap)
+            if best_gap is None or gap < best_gap:
+                best_gap, best_seed, best_idx = gap, seed, (train_idx, test_idx)
+        finally:
+            if seed == n_seed - 1:
+                progress(n_seed, n_seed, best_gap)
 
     if best_seed is None:
         raise ValueError("No seed passed the criteria.")
@@ -109,7 +101,7 @@ def save_checkpoint(train_df, test_df, features, filename, params, seed, gap,
         json.dump(meta, f, indent=2)
     return out_dir
 
-def split_data(df, features, filename, params, progress=None):
+def split_data(df, features, filename, params, progress):
     train_idx, test_idx, seed, gap = seed_search(df, features, params, progress=progress)
     train_df = df.iloc[train_idx].copy()
     test_df = df.iloc[test_idx].copy()
