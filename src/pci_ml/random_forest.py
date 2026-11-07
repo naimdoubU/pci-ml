@@ -3,7 +3,7 @@
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import GroupKFold, RandomizedSearchCV
+from sklearn.model_selection import GroupKFold, ParameterSampler, cross_validate
 
 
 def _max_depth(value):
@@ -33,20 +33,51 @@ def train_random_forest(X_train, y_train, params, random_state):
 
 
 def tune_random_forest(X_train, y_train, groups, param_distributions,
-                       n_iter, cv_splits, random_state):
-    """Search Random Forest hyperparameters with GroupKFold cross-validation."""
-    search = RandomizedSearchCV(
-        estimator=RandomForestRegressor(random_state=random_state),
-        param_distributions=param_distributions,
+                       n_iter, cv_splits, random_state, progress=None):
+    """Search Random Forest hyperparameters with GroupKFold cross-validation.
+
+    Returns the best model, its parameters, and mean CV MAE/RMSE/R2.
+    ``progress(done, total, best_mae)`` is called after each candidate.
+    """
+    cv = GroupKFold(n_splits=int(cv_splits))
+    sampler = ParameterSampler(
+        param_distributions,
         n_iter=int(n_iter),
-        scoring="neg_mean_absolute_error",
-        cv=GroupKFold(n_splits=int(cv_splits)),
         random_state=random_state,
-        n_jobs=-1,
-        refit=True,
     )
-    search.fit(X_train, y_train, groups=groups)
-    return search
+    scoring = {
+        "mae": "neg_mean_absolute_error",
+        "rmse": "neg_root_mean_squared_error",
+        "r2": "r2",
+    }
+
+    best_params = None
+    best_scores = None
+    for done, params in enumerate(sampler, start=1):
+        scores = cross_validate(
+            RandomForestRegressor(random_state=random_state, **params),
+            X_train, y_train,
+            groups=groups,
+            cv=cv,
+            scoring=scoring,
+            n_jobs=-1,
+        )
+        cv_scores = {
+            "mae": -float(np.mean(scores["test_mae"])),
+            "rmse": -float(np.mean(scores["test_rmse"])),
+            "r2": float(np.mean(scores["test_r2"])),
+        }
+
+        if best_scores is None or cv_scores["mae"] < best_scores["mae"]:
+            best_params = params
+            best_scores = cv_scores
+
+        if progress is not None:
+            progress(done, int(n_iter), best_scores["mae"])
+
+    model = RandomForestRegressor(random_state=random_state, **best_params)
+    model.fit(X_train, y_train)
+    return {"model": model, "params": best_params, "cv": best_scores}
 
 
 def evaluate_random_forest(model, X, y):
