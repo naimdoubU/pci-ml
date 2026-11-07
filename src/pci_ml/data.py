@@ -145,3 +145,9 @@ def load_checkpoint(filename, tag, out_root=data_dir):
     with open(out_dir / "meta.json", encoding="utf-8") as f:
         meta = json.load(f)
     return train_df, test_df, meta["features"], meta
+
+def latest_checkpoint(filename, out_root=data_dir):
+    options = checkpoint_options(filename, out_root)
+    if not options:
+        raise FileNotFoundError("run the split first")
+    return options[0][1]
