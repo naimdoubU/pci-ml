@@ -23,7 +23,7 @@ def release(*names):
         widget_type = ()
 
     for name in names:
-        if name not in ip.user_ns:                # already gone: skip silently
+        if name not in ip.user_ns:
             continue
         obj = ip.user_ns[name]
         if widget_type and isinstance(obj, widget_type):

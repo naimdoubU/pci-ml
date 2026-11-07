@@ -98,7 +98,7 @@ def save_checkpoint(train_df, test_df, features, filename, params, seed, gap,
         "n_test": len(test_df),
         "created_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
     }
-    with open(out_dir / "meta.json", "w", encoding="utf-8") as f:   # written last
+    with open(out_dir / "meta.json", "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     return out_dir
 
