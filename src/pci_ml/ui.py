@@ -4,6 +4,10 @@ import ipywidgets as wg
 from IPython.display import display
 
 
+def _resolve_file(datasets, defaults):
+    return defaults["file"] or (datasets[0] if datasets else None)
+
+
 class ControlPanel:
     """Holds the dataset dropdown and the split parameters."""
 
@@ -13,7 +17,7 @@ class ControlPanel:
 
         self.file = wg.Dropdown(
             options=datasets,
-            value=defaults["file"] or (datasets[0] if datasets else None),
+            value=_resolve_file(datasets, defaults),
             description="Pilih file :",
             style=style,
             layout=wg.Layout(width="400px", margin="0 0 6px 0"),
@@ -51,12 +55,39 @@ class ControlPanel:
         }
 
 
-def build_panel(datasets, defaults, on_file_change=None):
+class StaticPanel:
+    """Read-only panel used when export mode is on."""
+
+    def __init__(self, values):
+        self._values = values
+
+    def values(self):
+        return dict(self._values)
+
+
+def build_panel(datasets, defaults, on_file_change=None, export=False):
     """Build and display the control panel; return it for snapshotting.
 
-    The caller triggers the initial preview after creating its output
-    handle, so the panel appears above that preview.
+    In export mode the widgets are replaced by printed values taken from
+    ``defaults``. The caller triggers the initial preview after creating
+    its output handle, so the panel appears above that preview.
     """
+    if export:
+        values = {
+            "file": _resolve_file(datasets, defaults),
+            "n_seed": int(defaults["n_seed"]),
+            "test_size": float(defaults["test_size"]),
+            "share_tol": float(defaults["share_tol"]),
+            "pci_min": float(defaults["pci_min"]),
+        }
+        print(f"File terpilih untuk analisis: {values['file']}")
+        print("Parameter Pemisahan Data:")
+        print(f"- Jumlah seed     : {values['n_seed']}")
+        print(f"- Test size       : {values['test_size']}")
+        print(f"- Share tolerance : {values['share_tol']}")
+        print(f"- PCI minimum     : {values['pci_min']}")
+        return StaticPanel(values)
+
     panel = ControlPanel(datasets, defaults, on_file_change=on_file_change)
     display(panel.widget)
     return panel
