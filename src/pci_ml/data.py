@@ -132,7 +132,7 @@ def checkpoint_options(filename, out_root=data_dir):
         with open(base / tag / "meta.json", encoding="utf-8") as f:
             m = json.load(f)
         p = m["params"]
-        label = (f"{m['created_at']} | seed {m['seed']} | gap {m['gap']:.4f} | "
+        label = (f"{Path(m['source_file']).stem} | {m['created_at']} | seed {m['seed']} | gap {m['gap']:.4f} | "
                  f"test {p['test_size']} | tol {p['share_tol']} | pci_min {p['pci_min']}")
         rows.append((m["created_at"], label, tag))
     rows.sort(reverse=True)                      # newest first
