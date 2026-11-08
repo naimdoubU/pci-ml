@@ -121,7 +121,7 @@ def split_progress(done, total, best_gap):
     # any prints made before the search started (e.g., parameters).
     if done > 0 or best_gap is not None:
         clear_output(wait=True)
-    print(f"Mencari Seeds: {done}/{total} | Best Gap: {gap}", flush=True)
+    print(f"Pencarian Seeds: {done}/{total} | Best Gap: {gap}", flush=True)
 
 
 def build_hyperparameter_table(params, keys, explanations):
