@@ -44,8 +44,9 @@ def add_aggregate_features(df, features):
 
     ``TOTAL_DENSITY`` is the row-wise sum of all density features.
     ``SEVERITY_WEIGHTED`` weights each feature by its severity suffix
-    (``_L``=1, ``_M``=2, ``_H``=3). The transform is stateless, so the
-    same columns can be derived for any split.
+    (``_L``=1, ``_M``=2, ``_H``=3). Both columns are inserted before
+    ``PCI`` so it stays the last column. The transform is stateless, so
+    the same columns can be derived for any split.
     """
     df = df.copy()
     density = df[features].astype("float32")
@@ -58,6 +59,11 @@ def add_aggregate_features(df, features):
 
     df["TOTAL_DENSITY"] = density.sum(axis=1).astype("float32")
     df["SEVERITY_WEIGHTED"] = severity
+
+    # Keep PCI as the last column of the cleaned frame.
+    ordered = [name for name in df.columns
+               if name not in AGGREGATE_FEATURES and name != PCI]
+    df = df[[*ordered, *AGGREGATE_FEATURES, PCI]]
     return df, [*features, *AGGREGATE_FEATURES]
 
 
