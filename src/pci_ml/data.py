@@ -67,7 +67,7 @@ def add_aggregate_features(df, features):
     return df, [*features, *AGGREGATE_FEATURES]
 
 
-def seed_search(df, features, params, progress):
+def seed_search(df, features, params, progress=None):
     n_seed = int(params["n_seed"])
     test_size = params["test_size"]
     tol = params["share_tol"]
@@ -81,7 +81,8 @@ def seed_search(df, features, params, progress):
 
     for seed in range(n_seed):
         try:
-            progress(seed, n_seed, best_gap)
+            if progress is not None:
+                progress(seed, n_seed, best_gap)
 
             gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
             train_idx, test_idx = next(gss.split(df, groups=df[ROAD_ID]))
@@ -102,7 +103,7 @@ def seed_search(df, features, params, progress):
             if best_gap is None or gap < best_gap:
                 best_gap, best_seed, best_idx = gap, seed, (train_idx, test_idx)
         finally:
-            if seed == n_seed - 1:
+            if seed == n_seed - 1 and progress is not None:
                 progress(n_seed, n_seed, best_gap)
 
     if best_seed is None:
@@ -135,7 +136,7 @@ def save_checkpoint(train_df, test_df, features, filename, params, seed, gap,
         json.dump(meta, f, indent=2)
     return out_dir
 
-def split_data(df, features, filename, params, progress):
+def split_data(df, features, filename, params, progress=None):
     train_idx, test_idx, seed, gap = seed_search(df, features, params, progress=progress)
     train_df = df.iloc[train_idx].copy()
     test_df = df.iloc[test_idx].copy()

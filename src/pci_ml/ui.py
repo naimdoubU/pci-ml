@@ -1,9 +1,8 @@
-"""Tabel dan progress helper untuk notebook PCI ML."""
+"""Tabel helper untuk notebook PCI ML."""
 
 import html
 
 import pandas as pd
-from IPython.display import clear_output
 
 TABLE_STYLE = "font-size: 11px; border-collapse: collapse; width: 100%;"
 HEADER_STYLE = "padding: 6px 10px;"
@@ -110,18 +109,6 @@ def format_dataframe_table(df_input, n_rows=5, left_count=5, right_count=2):
             aligns.append("left")
 
     return format_table(headers, rows, aligns, nowrap=range(len(headers)))
-
-
-def split_progress(done, total, best_gap):
-    """Print split-search progress without flooding the notebook."""
-    if done % 100 != 0 and done != total:
-        return
-    gap = "-" if best_gap is None else f"{best_gap:.4f}"
-    # Only clear output after the first progress update to preserve
-    # any prints made before the search started (e.g., parameters).
-    if done > 0 or best_gap is not None:
-        clear_output(wait=True)
-    print(f"Pencarian Seeds: {done}/{total} | Best Gap: {gap}", flush=True)
 
 
 def build_hyperparameter_table(params, keys, explanations):
