@@ -58,6 +58,16 @@ def fit_full(estimator, X, y, sample_weight=None):
     return model
 
 
+def evaluate_predictions(y, predictions):
+    """Return MAE, RMSE, and R2 for one set of predictions."""
+    predictions = np.asarray(predictions)
+    return {
+        "mae": float(mean_absolute_error(y, predictions)),
+        "rmse": float(np.sqrt(mean_squared_error(y, predictions))),
+        "r2": float(r2_score(y, predictions)),
+    }
+
+
 def evaluate_oof(y, oof, groups, folds, bins=PCI_BINS):
     """Summarise out-of-fold predictions.
 
@@ -100,11 +110,7 @@ def evaluate_oof(y, oof, groups, folds, bins=PCI_BINS):
     high = frame["pci"] > 85
 
     return {
-        "pooled": {
-            "mae": float(mean_absolute_error(y, oof)),
-            "rmse": float(np.sqrt(mean_squared_error(y, oof))),
-            "r2": float(r2_score(y, oof)),
-        },
+        "pooled": evaluate_predictions(y, oof),
         "per_fold": per_fold,
         "per_bin": per_bin,
         "per_road": per_road,
@@ -196,11 +202,7 @@ def evaluate_variant(estimator, X_train, y_train, groups, folds,
         if calibrate is not None:
             calibrator = fit_final_calibrator(raw_oof, y_train, calibrate)
             predictions = apply_calibrator(calibrator, predictions, calibrate)
-        result["test"] = {
-            "mae": float(mean_absolute_error(y_test, predictions)),
-            "rmse": float(np.sqrt(mean_squared_error(y_test, predictions))),
-            "r2": float(r2_score(y_test, predictions)),
-        }
+        result["test"] = evaluate_predictions(y_test, predictions)
     else:
         result["test"] = {"mae": np.nan, "rmse": np.nan, "r2": np.nan}
     return result

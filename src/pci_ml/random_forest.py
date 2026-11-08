@@ -1,10 +1,10 @@
-"""Random Forest training, tuning, and evaluation helpers."""
+"""Random Forest estimator and tuning helpers."""
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import (GroupKFold, ParameterSampler,
-                                     cross_val_predict, cross_validate)
+from sklearn.model_selection import ParameterSampler, cross_validate
+
+from pci_ml.experiments import fit_full, make_folds, oof_predict
 
 
 def _max_depth(value):
@@ -28,92 +28,48 @@ def rf_estimator(params, random_state):
     )
 
 
-def train_random_forest(X_train, y_train, params, random_state,
-                        sample_weight=None):
-    """Train a Random Forest regressor from a parameter snapshot.
-
-    ``max_depth`` and ``max_samples`` use 0 or None to mean no limit.
-    ``sample_weight`` is optional and defaults to ``None``, so existing
-    callers keep their current behaviour.
-    """
-    model = rf_estimator(params, random_state)
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
-
-
 def tune_random_forest(X_train, y_train, groups, param_distributions,
                        n_iter, cv_splits, random_state, progress=None):
     """Search Random Forest hyperparameters with GroupKFold cross-validation.
 
-    Returns the best model, its parameters, mean per-fold CV scores, and
-    pooled out-of-fold CV scores. ``progress(done, total, best_mae)`` is
-    called after each candidate.
+    Returns the best model, its parameters, the shared folds, and pooled
+    out-of-fold predictions. ``progress(done, total, best_mae)`` is called
+    after each candidate.
     """
-    cv = GroupKFold(n_splits=int(cv_splits))
+    folds = make_folds(groups, n_splits=int(cv_splits))
     sampler = ParameterSampler(
         param_distributions,
         n_iter=int(n_iter),
         random_state=random_state,
     )
-    scoring = {
-        "mae": "neg_mean_absolute_error",
-        "rmse": "neg_root_mean_squared_error",
-        "r2": "r2",
-    }
+    scoring = {"mae": "neg_mean_absolute_error"}
 
     best_params = None
-    best_scores = None
+    best_mae = None
     for done, params in enumerate(sampler, start=1):
         scores = cross_validate(
             rf_estimator(params, random_state),
             X_train, y_train,
-            groups=groups,
-            cv=cv,
+            cv=folds,
             scoring=scoring,
             n_jobs=-1,
         )
-        cv_scores = {
-            "mae": -float(np.mean(scores["test_mae"])),
-            "rmse": -float(np.mean(scores["test_rmse"])),
-            "r2": float(np.mean(scores["test_r2"])),
-        }
+        mae = -float(np.mean(scores["test_mae"]))
 
-        if best_scores is None or cv_scores["mae"] < best_scores["mae"]:
+        if best_mae is None or mae < best_mae:
             best_params = params
-            best_scores = cv_scores
+            best_mae = mae
 
         if progress is not None:
-            progress(done, int(n_iter), best_scores["mae"])
+            progress(done, int(n_iter), best_mae)
 
-    model = rf_estimator(best_params, random_state)
-    model.fit(X_train, y_train)
-
-    oof_predictions = cross_val_predict(
-        rf_estimator(best_params, random_state),
-        X_train, y_train,
-        groups=groups,
-        cv=cv,
-        n_jobs=-1,
+    model = fit_full(rf_estimator(best_params, random_state), X_train, y_train)
+    oof_predictions = oof_predict(
+        rf_estimator(best_params, random_state), X_train, y_train, folds
     )
-    pooled_scores = {
-        "mae": float(mean_absolute_error(y_train, oof_predictions)),
-        "rmse": float(np.sqrt(mean_squared_error(y_train, oof_predictions))),
-        "r2": float(r2_score(y_train, oof_predictions)),
-    }
     return {
         "model": model,
         "params": best_params,
-        "cv": best_scores,
-        "cv_pooled": pooled_scores,
-    }
-
-
-def evaluate_random_forest(model, X, y):
-    """Return MAE, RMSE, R2, and predictions for the given data."""
-    predictions = model.predict(X)
-    return {
-        "mae": float(mean_absolute_error(y, predictions)),
-        "rmse": float(np.sqrt(mean_squared_error(y, predictions))),
-        "r2": float(r2_score(y, predictions)),
-        "predictions": predictions,
+        "folds": folds,
+        "oof": oof_predictions,
     }

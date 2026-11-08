@@ -115,8 +115,8 @@ Penanda bagian pelatihan model.
 - `tune_random_forest` menjalankan pencarian dengan `GroupKFold` dan memilih kandidat dengan MAE CV terendah.
 - Model final dilatih pada seluruh data latih dengan hyperparameter terbaik.
 - Evaluasi dilakukan dengan:
-  - **CV pooled OOF**: prediksi out-of-fold dari semua fold digabung,
-  - **Test**: evaluasi pada data uji yang tidak dipakai saat tuning.
+  - **CV pooled OOF**: prediksi out-of-fold dari semua fold digabung, dihitung dengan `evaluate_oof`,
+  - **Test**: evaluasi pada data uji yang tidak dipakai saat tuning, dihitung dengan `evaluate_predictions`.
 - Menampilkan:
   - tabel hyperparameter terbaik,
   - tabel hasil evaluasi (MAE, RMSE, R²),
@@ -127,7 +127,7 @@ Penanda bagian pelatihan model.
 Menampilkan daftar modul pendukung:
 
 - `src/pci_ml/data.py` - pembersihan data, rekayasa fitur agregat, split, dan checkpoint.
-- `src/pci_ml/random_forest.py` - training, tuning, dan evaluasi Random Forest.
+- `src/pci_ml/random_forest.py` - factory estimator dan tuning Random Forest.
 - `src/pci_ml/experiments.py` - fold, OOF, metrik, bobot, dan kalibrasi yang model-agnostic.
 - `src/pci_ml/ui.py` - panel, progress split, dan tabel HTML.
 - `src/pci_ml/memory.py` - manajemen memori notebook.
