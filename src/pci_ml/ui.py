@@ -1,7 +1,35 @@
 """Control panel for the PCI ML notebook."""
 
+import pandas as pd
 import ipywidgets as wg
-from IPython.display import display
+from IPython.display import clear_output, display
+
+
+def format_adaptive_df(df_input):
+    """Return a compact HTML table with the first and last columns."""
+    if df_input is None:
+        return ""
+    df_head = df_input.head()
+    left_count = 5
+    right_count = 2
+    if df_head.shape[1] > (left_count + right_count):
+        left_cols = df_head.iloc[:, :left_count]
+        right_cols = df_head.iloc[:, -right_count:]
+        middle_col = pd.DataFrame({"…": ["…"] * len(df_head)}, index=df_head.index)
+        df_display = pd.concat([left_cols, middle_col, right_cols], axis=1)
+    else:
+        df_display = df_head
+    markdown_table = df_display.to_markdown(index=False)
+    return f'<div style="font-size: 11px;">\n\n{markdown_table}\n\n</div>'
+
+
+def split_progress(done, total, best_gap):
+    """Print split-search progress without flooding the notebook."""
+    if done % 100 != 0 and done != total:
+        return
+    gap = "-" if best_gap is None else f"{best_gap:.4f}"
+    clear_output(wait=True)
+    print(f"Mencari Seeds: {done}/{total} | Best Gap: {gap}", flush=True)
 
 
 def _resolve_file(datasets, defaults):
@@ -137,3 +165,36 @@ def build_panel(datasets, defaults, on_file_change=None, export=False):
     panel = ControlPanel(datasets, defaults, on_file_change=on_file_change)
     display(panel.widget)
     return panel
+
+
+def build_hyperparameter_table(params, keys, explanations):
+    """Return an HTML table describing selected hyperparameters."""
+    def format_value(value):
+        return "tanpa batas" if value is None else value
+
+    rows_html = ""
+    for key in keys:
+        value = format_value(params[key])
+        description = explanations[key]
+        rows_html += (
+            "    <tr style='border-bottom: 1px solid #eee;'>\n"
+            f"      <td style='padding: 6px 10px; font-family: monospace; white-space: nowrap;'>{key}</td>\n"
+            f"      <td style='padding: 6px 10px; text-align: center;'>{value}</td>\n"
+            f"      <td style='padding: 6px 10px; max-width: 400px; word-wrap: break-word;'>{description}</td>\n"
+            "    </tr>\n"
+        )
+
+    return (
+        "<table style='font-size: 11px; border-collapse: collapse; width: 100%;'>\n"
+        "  <thead>\n"
+        "    <tr style='border-bottom: 2px solid #ddd;'>\n"
+        "      <th style='padding: 6px 10px; text-align: left; white-space: nowrap;'>Hyperparameter</th>\n"
+        "      <th style='padding: 6px 10px; text-align: center; white-space: nowrap;'>Nilai</th>\n"
+        "      <th style='padding: 6px 10px; text-align: left;'>Keterangan</th>\n"
+        "    </tr>\n"
+        "  </thead>\n"
+        "  <tbody>\n"
+        + rows_html
+        + "  </tbody>\n"
+        "</table>"
+    )

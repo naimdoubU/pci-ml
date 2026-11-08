@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from pathlib import Path
@@ -8,6 +9,10 @@ from pathlib import Path
 data_dir = Path(__file__).resolve().parents[2] / "datasets"
 PCI, ROAD_ID, AREA = "PCI", "ROAD_ID", "SEGMENT_AREA"
 METADATA = ["ROAD_NAME", "SEGMENT_ID"]
+
+SEVERITY_WEIGHTS = {"_L": 1.0, "_M": 2.0, "_H": 3.0}
+AGGREGATE_FEATURES = ["TOTAL_DENSITY", "SEVERITY_WEIGHTED"]
+
 
 def list_datasets():
     return sorted (
@@ -32,6 +37,29 @@ def clean_data(df):
     df[features] = df[features].div(df[AREA], axis=0).clip(lower=0, upper=1)
     df = df.drop(columns=[AREA])
     return df, features
+
+
+def add_aggregate_features(df, features):
+    """Append total and severity-weighted density to the feature set.
+
+    ``TOTAL_DENSITY`` is the row-wise sum of all density features.
+    ``SEVERITY_WEIGHTED`` weights each feature by its severity suffix
+    (``_L``=1, ``_M``=2, ``_H``=3). The transform is stateless, so the
+    same columns can be derived for any split.
+    """
+    df = df.copy()
+    density = df[features].astype("float32")
+    severity = np.zeros(len(df), dtype="float32")
+    for column in features:
+        for suffix, weight in SEVERITY_WEIGHTS.items():
+            if column.endswith(suffix):
+                severity += density[column].to_numpy(dtype="float32") * weight
+                break
+
+    df["TOTAL_DENSITY"] = density.sum(axis=1).astype("float32")
+    df["SEVERITY_WEIGHTED"] = severity
+    return df, [*features, *AGGREGATE_FEATURES]
+
 
 def seed_search(df, features, params, progress):
     n_seed = int(params["n_seed"])

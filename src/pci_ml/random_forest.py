@@ -15,15 +15,9 @@ def _max_samples(value):
     return None if value in (0, None) else float(value)
 
 
-def train_random_forest(X_train, y_train, params, random_state,
-                        sample_weight=None):
-    """Train a Random Forest regressor from a parameter snapshot.
-
-    ``max_depth`` and ``max_samples`` use 0 or None to mean no limit.
-    ``sample_weight`` is optional and defaults to ``None``, so existing
-    callers keep their current behaviour.
-    """
-    model = RandomForestRegressor(
+def rf_estimator(params, random_state):
+    """Build an unfitted Random Forest from a parameter snapshot."""
+    return RandomForestRegressor(
         n_estimators=int(params["n_estimators"]),
         max_depth=_max_depth(params["max_depth"]),
         min_samples_split=int(params["min_samples_split"]),
@@ -32,6 +26,17 @@ def train_random_forest(X_train, y_train, params, random_state,
         max_samples=_max_samples(params.get("max_samples", 1.0)),
         random_state=random_state,
     )
+
+
+def train_random_forest(X_train, y_train, params, random_state,
+                        sample_weight=None):
+    """Train a Random Forest regressor from a parameter snapshot.
+
+    ``max_depth`` and ``max_samples`` use 0 or None to mean no limit.
+    ``sample_weight`` is optional and defaults to ``None``, so existing
+    callers keep their current behaviour.
+    """
+    model = rf_estimator(params, random_state)
     model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
 
@@ -60,7 +65,7 @@ def tune_random_forest(X_train, y_train, groups, param_distributions,
     best_scores = None
     for done, params in enumerate(sampler, start=1):
         scores = cross_validate(
-            RandomForestRegressor(random_state=random_state, **params),
+            rf_estimator(params, random_state),
             X_train, y_train,
             groups=groups,
             cv=cv,
@@ -80,11 +85,11 @@ def tune_random_forest(X_train, y_train, groups, param_distributions,
         if progress is not None:
             progress(done, int(n_iter), best_scores["mae"])
 
-    model = RandomForestRegressor(random_state=random_state, **best_params)
+    model = rf_estimator(best_params, random_state)
     model.fit(X_train, y_train)
 
     oof_predictions = cross_val_predict(
-        RandomForestRegressor(random_state=random_state, **best_params),
+        rf_estimator(best_params, random_state),
         X_train, y_train,
         groups=groups,
         cv=cv,

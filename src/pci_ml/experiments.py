@@ -1,11 +1,9 @@
-"""Model-agnostic helpers for the PCI improvement experiments.
+"""Model-agnostic helpers for the PCI experiments.
 
-These helpers keep the experiment harness in one place so the same folds,
-metrics, aggregate features, weights, and calibration can be reused by the
-RF, XGBoost, and ANN sections.
-
-Added for the Random Forest improvement study; existing behaviour elsewhere
-is unchanged.
+The same folds, metrics, weights, and calibration can be reused by the
+Random Forest, XGBoost, and ANN sections. Pass any scikit-learn compatible
+regressor to :func:`oof_predict`, :func:`fit_full`, or
+:func:`evaluate_variant`.
 """
 
 import numpy as np
@@ -17,7 +15,6 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold
 
 PCI_BINS = [0, 25, 40, 55, 70, 85, 100]
-SEVERITY_WEIGHTS = {"_L": 1.0, "_M": 2.0, "_H": 3.0}
 
 
 def make_folds(groups, n_splits=5, shuffle=False, random_state=None):
@@ -49,6 +46,16 @@ def oof_predict(estimator, X, y, folds, sample_weight=None):
                       sample_weight=sample_weight[train_idx])
         oof[valid_idx] = model.predict(X[valid_idx])
     return oof
+
+
+def fit_full(estimator, X, y, sample_weight=None):
+    """Clone and fit ``estimator`` on the full training data."""
+    model = clone(estimator)
+    if sample_weight is None:
+        model.fit(X, y)
+    else:
+        model.fit(X, y, sample_weight=np.asarray(sample_weight, dtype=float))
+    return model
 
 
 def evaluate_oof(y, oof, groups, folds, bins=PCI_BINS):
@@ -114,28 +121,6 @@ def evaluate_oof(y, oof, groups, folds, bins=PCI_BINS):
     }
 
 
-def aggregate_features(X, feature_names):
-    """Add total and severity-weighted density as row-wise features.
-
-    The features are stateless, so the same transform can be applied to
-    train and test. They stay outside the checkpointed arrays.
-    """
-    X = np.asarray(X, dtype="float32")
-    frame = pd.DataFrame(X, columns=feature_names)
-
-    severity = np.zeros(len(frame), dtype="float32")
-    for column in feature_names:
-        for suffix, weight in SEVERITY_WEIGHTS.items():
-            if column.endswith(suffix):
-                severity += frame[column].to_numpy(dtype="float32") * weight
-                break
-
-    total = frame.sum(axis=1).to_numpy(dtype="float32")
-    augmented = np.column_stack([X, total, severity]).astype("float32")
-    names = list(feature_names) + ["TOTAL_DENSITY", "SEVERITY_WEIGHTED"]
-    return augmented, names
-
-
 def condition_weights(y, alpha):
     """Weight poor segments more: ``w = 1 + alpha * (100 - PCI) / 100``."""
     y = np.asarray(y, dtype=float)
@@ -185,3 +170,51 @@ def fit_final_calibrator(oof, y, method):
 def apply_calibrator(calibrator, predictions, method):
     """Apply a calibrator returned by :func:`fit_final_calibrator`."""
     return _apply_calibrator(calibrator, predictions, method)
+
+
+def evaluate_variant(estimator, X_train, y_train, groups, folds,
+                     X_test=None, y_test=None, sample_weight=None,
+                     calibrate=None):
+    """Evaluate one estimator configuration with CV and, optionally, test.
+
+    ``estimator`` may be any scikit-learn compatible regressor (RF,
+    XGBoost, ...). When ``X_test``/``y_test`` are provided, the model is
+    refit on all training rows and scored on the test set. A calibrator is
+    always learned from out-of-fold predictions only.
+    """
+    raw_oof = oof_predict(estimator, X_train, y_train, folds, sample_weight)
+    oof = raw_oof
+    if calibrate is not None:
+        oof = calibrate_oof(raw_oof, y_train, folds, calibrate)
+
+    result = evaluate_oof(y_train, oof, groups, folds)
+    result["oof"] = oof
+
+    if X_test is not None and y_test is not None:
+        model = fit_full(estimator, X_train, y_train, sample_weight)
+        predictions = model.predict(X_test)
+        if calibrate is not None:
+            calibrator = fit_final_calibrator(raw_oof, y_train, calibrate)
+            predictions = apply_calibrator(calibrator, predictions, calibrate)
+        result["test"] = {
+            "mae": float(mean_absolute_error(y_test, predictions)),
+            "rmse": float(np.sqrt(mean_squared_error(y_test, predictions))),
+            "r2": float(r2_score(y_test, predictions)),
+        }
+    else:
+        result["test"] = {"mae": np.nan, "rmse": np.nan, "r2": np.nan}
+    return result
+
+
+def shuffled_cv_mae(estimator, X, y, groups, n_splits=5, seeds=range(5),
+                    sample_weight=None, calibrate=None):
+    """Pooled MAE over several shuffled group-fold assignments."""
+    values = []
+    for seed in seeds:
+        folds = make_folds(groups, n_splits=n_splits, shuffle=True,
+                           random_state=seed)
+        oof = oof_predict(estimator, X, y, folds, sample_weight)
+        if calibrate is not None:
+            oof = calibrate_oof(oof, y, folds, calibrate)
+        values.append(float(mean_absolute_error(y, oof)))
+    return np.asarray(values)
