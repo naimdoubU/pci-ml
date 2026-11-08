@@ -15,10 +15,13 @@ def _max_samples(value):
     return None if value in (0, None) else float(value)
 
 
-def train_random_forest(X_train, y_train, params, random_state):
+def train_random_forest(X_train, y_train, params, random_state,
+                        sample_weight=None):
     """Train a Random Forest regressor from a parameter snapshot.
 
     ``max_depth`` and ``max_samples`` use 0 or None to mean no limit.
+    ``sample_weight`` is optional and defaults to ``None``, so existing
+    callers keep their current behaviour.
     """
     model = RandomForestRegressor(
         n_estimators=int(params["n_estimators"]),
@@ -29,7 +32,7 @@ def train_random_forest(X_train, y_train, params, random_state):
         max_samples=_max_samples(params.get("max_samples", 1.0)),
         random_state=random_state,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
 
 
