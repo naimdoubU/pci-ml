@@ -117,7 +117,10 @@ def split_progress(done, total, best_gap):
     if done % 100 != 0 and done != total:
         return
     gap = "-" if best_gap is None else f"{best_gap:.4f}"
-    clear_output(wait=True)
+    # Only clear output after the first progress update to preserve
+    # any prints made before the search started (e.g., parameters).
+    if done > 0 or best_gap is not None:
+        clear_output(wait=True)
     print(f"Mencari Seeds: {done}/{total} | Best Gap: {gap}", flush=True)
 
 
