@@ -5,7 +5,6 @@ from IPython import get_ipython
 # Setting, changed through configure() from the notebook
 _cfg = {"release": True}
 
-
 def configure(release=True):
     """release=False makes release() do nothing (useful for comparing runs)."""
     _cfg["release"] = release

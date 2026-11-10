@@ -4,10 +4,10 @@
     "n_seed": 200,
     "test_size": 0.2,
     "share_tol": 0.01,
-    "pci_min": 0.0
+    "pci_min": 0
   },
   "seed": 179,
-  "gap": 0.7555687323642388,
+  "gap": 0.7543527831997388,
   "features": [
     "GATOR_CRACK_L",
     "GATOR_CRACK_M",
@@ -63,9 +63,13 @@
     "SWELL_H",
     "RAVELLING_L",
     "RAVELLING_M",
-    "RAVELLING_H"
+    "RAVELLING_H",
+    "TOTAL_DENSITY",
+    "TOTAL_L",
+    "TOTAL_M",
+    "TOTAL_H"
   ],
   "n_train": 933,
   "n_test": 244,
-  "created_at": "2026-11-07 | 15:28:57"
+  "created_at": "2026-11-10 | 15:24:07"
 }

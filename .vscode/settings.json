@@ -8,5 +8,12 @@
         "**/__pycache__": true,
         "**/.ipynb_checkpoints": true,
         "**/__init__.py":true,
-    }
+    },
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    
+    "python.analysis.diagnosticSeverityOverrides": {
+      "reportMissingModuleSource": "none"
+    },
+    "python.REPL.enableREPLSmartSend": false
+
 }
