@@ -3,7 +3,7 @@ from pathlib import Path
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_predict
 
-from pci_ml.model import mean_fold_mae
+from pci_ml.model import clip_pci, mean_fold_mae
 from pci_ml.data import DataSplit
 from pci_ml.ui import evaluation_table, param_table, show_report
 
@@ -18,7 +18,7 @@ def best_rf_candidate(candidates, features, target, seed, cv):
 
     for params in candidates:
         forest = RandomForestRegressor(**params, random_state=seed)
-        oof = cross_val_predict(forest, features, target, cv=cv, n_jobs=-1)
+        oof = clip_pci(cross_val_predict(forest, features, target, cv=cv, n_jobs=-1))
         mae = mean_fold_mae(target, oof, cv)
 
         if mae < best_mae:
@@ -40,6 +40,9 @@ def save_rf(model, filename, params):
 
 def load_rf(filename, params):
     return joblib.load(rf_path(filename, params))
+
+def predict_rf(model, features):
+    return clip_pci(model.predict(features))
 
 # RF hyperparameter table
 RF_PARAM_EXPLANATIONS = {

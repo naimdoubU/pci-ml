@@ -3,6 +3,12 @@ import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import GroupKFold
 
+# Batas valid nilai PCI, dipakai untuk membatasi prediksi model
+PCI_MIN, PCI_MAX = 0.0, 100.0
+
+def clip_pci(predicted):
+    return np.clip(np.asarray(predicted, dtype=float), PCI_MIN, PCI_MAX)
+
 def make_folds(groups, n_splits):
     kfold = GroupKFold(n_splits=n_splits)
     return  list(kfold.split(np.zeros(len(groups)), groups=groups))

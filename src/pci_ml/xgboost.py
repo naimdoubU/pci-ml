@@ -2,7 +2,7 @@ from pathlib import Path
 from sklearn.model_selection import cross_val_predict
 from xgboost import XGBRegressor
 
-from pci_ml.model import mean_fold_mae
+from pci_ml.model import clip_pci, mean_fold_mae
 from pci_ml.data import DataSplit
 from pci_ml.ui import evaluation_table, param_table, show_report
 
@@ -17,7 +17,7 @@ def best_xgb_candidate(candidates, features, target, seed, cv):
 
     for params in candidates:
         model = XGBRegressor(**params, random_state=seed, verbosity=0)
-        oof = cross_val_predict(model, features, target, cv=cv, n_jobs=-1)
+        oof = clip_pci(cross_val_predict(model, features, target, cv=cv, n_jobs=-1))
         mae = mean_fold_mae(target, oof, cv)
 
         if mae < best_mae:
@@ -41,6 +41,9 @@ def load_xgb(filename, params):
     model = XGBRegressor()
     model.load_model(xgb_path(filename, params))
     return model
+
+def predict_xgb(model, features):
+    return clip_pci(model.predict(features))
 
 # XGB hyperparameter table
 XGB_PARAM_EXPLANATIONS = {
