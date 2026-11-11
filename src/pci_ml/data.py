@@ -145,6 +145,10 @@ class DataSplit:
         out_dir = self.save(train_df, test_df, seed, gap)
 
         summary = (
+            # f"Jumlah seed dicari: {self.params["n_seed"]} | "
+            # f"Test size: {self.params["test_size"]} | "
+            # f"Toleransi distribusi: {self.params["share_tol"]} | "
+            # f"PCI minimum: {self.params["pci_min"]}\n"
             f"Seed used: {seed} (Gap: {gap:.4f})\n"
             f"Train: {len(train_df)} rows ({len(train_df) / len(self.df):.2%}) | "
             f"Test: {len(test_df)} rows ({len(test_df) / len(self.df):.2%})\n"

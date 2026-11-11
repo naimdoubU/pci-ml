@@ -18,6 +18,7 @@ Thumbs.db
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
+*.html
 
 # Secret files
 .env
