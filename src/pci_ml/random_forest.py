@@ -1,12 +1,11 @@
 import joblib
 from pathlib import Path
-from IPython.display import HTML, Markdown, display
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import cross_val_predict
 
 from pci_ml.model import mean_fold_mae
 from pci_ml.data import DataSplit
-from pci_ml.ui import build_hyperparameter_table, format_table
+from pci_ml.ui import evaluation_table, param_table, show_report
 
 tag = DataSplit.make_tag
 
@@ -52,27 +51,13 @@ RF_PARAM_EXPLANATIONS = {
     "max_samples": "Fraksi data latih yang dipakai untuk tiap pohon.",
 }
 
-_METRICS = ("mae", "rmse", "r2")
-
-
-def _score_row(label, score):
-    return [label, *(f"{score[m]:.4f}" for m in _METRICS)]
-
-
 def rf_param_table(best_params, search_space, explanations=RF_PARAM_EXPLANATIONS):
-    return build_hyperparameter_table(best_params, search_space.keys(), explanations)
+    return param_table(best_params, search_space, explanations)
 
 
 def rf_evaluation_table(cv_score, test_score):
-    return format_table(
-        ["Evaluasi", "MAE", "RMSE", "R²"],
-        [_score_row("Cross-Validation", cv_score), _score_row("Test", test_score)],
-        aligns=["left", "center", "center", "center"],
-    )
+    return evaluation_table(cv_score, test_score)
 
 
 def show_rf_report(best_params, search_space, cv_score, test_score):
-    display(Markdown("##### **Hyperparameter terbaik**"))
-    display(HTML(rf_param_table(best_params, search_space)))
-    display(Markdown("##### **Hasil evaluasi**"))
-    display(HTML(rf_evaluation_table(cv_score, test_score)))
+    show_report(best_params, search_space, cv_score, test_score, RF_PARAM_EXPLANATIONS)

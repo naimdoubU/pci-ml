@@ -1,12 +1,10 @@
 from pathlib import Path
-from IPython.display import HTML, Markdown, display
 from sklearn.model_selection import cross_val_predict
 from xgboost import XGBRegressor
 
 from pci_ml.model import mean_fold_mae
 from pci_ml.data import DataSplit
-from pci_ml.random_forest import rf_evaluation_table
-from pci_ml.ui import build_hyperparameter_table
+from pci_ml.ui import evaluation_table, param_table, show_report
 
 tag = DataSplit.make_tag
 
@@ -58,15 +56,12 @@ XGB_PARAM_EXPLANATIONS = {
 
 
 def xgb_param_table(best_params, search_space, explanations=XGB_PARAM_EXPLANATIONS):
-    return build_hyperparameter_table(best_params, search_space.keys(), explanations)
+    return param_table(best_params, search_space, explanations)
 
 
 def xgb_evaluation_table(cv_score, test_score):
-    return rf_evaluation_table(cv_score, test_score)
+    return evaluation_table(cv_score, test_score)
 
 
 def show_xgb_report(best_params, search_space, cv_score, test_score):
-    display(Markdown("##### **Hyperparameter terbaik**"))
-    display(HTML(xgb_param_table(best_params, search_space)))
-    display(Markdown("##### **Hasil evaluasi**"))
-    display(HTML(xgb_evaluation_table(cv_score, test_score)))
+    show_report(best_params, search_space, cv_score, test_score, XGB_PARAM_EXPLANATIONS)
