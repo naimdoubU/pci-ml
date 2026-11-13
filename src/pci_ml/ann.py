@@ -139,6 +139,26 @@ def fit_ann(model, params, features, target, seed, epochs, patience,
     model.best_epoch = best_epoch
     return model
 
+# Evaluasi satu kandidat dengan cross-validation dan kembalikan pooled OOF
+def _evaluate_ann_candidate(params, features, target, seed, cv, epochs, patience):
+    oof = np.zeros(len(target), dtype="float32")
+
+    for train_idx, valid_idx in cv:
+        model = train_ann(
+            params,
+            features[train_idx],
+            target[train_idx],
+            seed,
+            epochs=epochs,
+            patience=patience,
+        )
+        oof[valid_idx] = predict_ann(model, features[valid_idx])
+
+    mae = mean_fold_mae(target, oof, cv)
+    del model
+    gc.collect()
+    return mae, oof
+
 # Hyperparameter tuning ann
 def best_ann_candidate(candidates, features, target, seed, cv, epochs=200, patience=15):
     features = np.asarray(features)
@@ -146,27 +166,25 @@ def best_ann_candidate(candidates, features, target, seed, cv, epochs=200, patie
     best_mae, best_params, best_oof = float("inf"), None, None
 
     for params in candidates:
-        oof = np.zeros(len(target), dtype="float32")
+        mae, oof = _evaluate_ann_candidate(params, features, target, seed, cv, epochs, patience)
 
-        for train_idx, valid_idx in cv:
-            model = train_ann(
-                params,
-                features[train_idx],
-                target[train_idx],
-                seed,
-                epochs=epochs,
-                patience=patience,
-            )
-            oof[valid_idx] = predict_ann(model, features[valid_idx])
-
-        mae = mean_fold_mae(target, oof, cv)
         if mae < best_mae:
             best_mae, best_params, best_oof = mae, params, oof
 
-        del model
-        gc.collect()
-
     return best_mae, best_params, best_oof
+
+# Urutkan beberapa kandidat terbaik untuk pencarian bertahap
+def rank_ann_candidates(candidates, features, target, seed, cv, epochs=200, patience=15, top_k=3):
+    features = np.asarray(features)
+    target = np.asarray(target)
+    results = []
+
+    for params in candidates:
+        mae, oof = _evaluate_ann_candidate(params, features, target, seed, cv, epochs, patience)
+        results.append((mae, params, oof))
+
+    results.sort(key=lambda result: result[0])
+    return results[:top_k]
 
 def train_ann(params, features, target, seed, epochs=200, patience=15, validation_split=0.1):
     features = np.asarray(features, dtype="float32")
