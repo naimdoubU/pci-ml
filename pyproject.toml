@@ -15,6 +15,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pandas>=3.1.1",
     "scikit-learn>=1.9.1",
+    "torch>=2.15.0",
     "xgboost>=3.4.1",
 ]
 
@@ -35,3 +36,13 @@ known_first_party = ["pci_ml"]
 
 [tool.deptry.per_rule_ignores]
 DEP002 = ["ipykernel"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

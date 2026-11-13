@@ -3,7 +3,7 @@
         "**/.venv": true,
         "**/uv.lock": true,
         "**/.python-version": true,
-        "**/pyproject.toml": true,
+        "**/pyproject.toml": false,
         "**/.vscode": true,
         "**/__pycache__": true,
         "**/.ipynb_checkpoints": true,
