@@ -33,3 +33,5 @@ models/*.pth
 models/*.h5
 wandb/
 mlruns/
+windows-models/
+outputs/
