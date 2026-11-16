@@ -99,3 +99,44 @@ def show_report(best_params, search_space, cv_score, test_score, explanations):
     display(HTML(param_table(best_params, search_space, explanations)))
     display(Markdown("##### **Hasil evaluasi**"))
     display(HTML(evaluation_table(cv_score, test_score)))
+
+
+# Tabel perbandingan model: metrik CV dan test tiap model, sudah terurut
+# berdasarkan CV MAE. Input berupa list (nama, (cv_score, test_score)).
+def model_comparison_table(ranked):
+    rows = [
+        [
+            name,
+            f"{cv['mae']:.4f}", f"{cv['rmse']:.4f}", f"{cv['r2']:.4f}",
+            f"{test['mae']:.4f}", f"{test['rmse']:.4f}", f"{test['r2']:.4f}",
+        ]
+        for name, (cv, test) in ranked
+    ]
+    return format_table(
+        ["Model", "CV MAE", "CV RMSE", "CV R²", "Test MAE", "Test RMSE", "Test R²"],
+        rows,
+        aligns=["left", "center", "center", "center", "center", "center", "center"],
+    )
+
+
+# Ringkasan model terbaik: model peringkat pertama berdasarkan CV MAE, metrik
+# CV dan test-nya, serta selisih CV MAE terhadap peringkat kedua.
+def model_selection_summary(ranked):
+    best_name, (best_cv, best_test) = ranked[0]
+    margin = ranked[1][1][0]["mae"] - best_cv["mae"]
+
+    return (
+        f"**Model terbaik: {best_name}**\n\n"
+        f"- Cross-Validation — MAE {best_cv['mae']:.4f} | "
+        f"RMSE {best_cv['rmse']:.4f} | R² {best_cv['r2']:.4f}\n"
+        f"- Test — MAE {best_test['mae']:.4f} | "
+        f"RMSE {best_test['rmse']:.4f} | R² {best_test['r2']:.4f}\n\n"
+        f"Kriteria seleksi: CV MAE. RMSE dan R² hanya untuk pelaporan. "
+        f"Selisih CV MAE terhadap peringkat kedua: {margin:.4f}."
+    )
+
+
+# Tampilkan perbandingan model: tabel metrik lalu ringkasan model terbaik.
+def show_model_comparison(ranked):
+    display(HTML(model_comparison_table(ranked)))
+    display(Markdown(model_selection_summary(ranked)))

@@ -22,3 +22,7 @@ def mean_fold_mae(actual, predicted, folds):
         for _, valid_idx in folds
     ]))
 
+def rank_models(scores):
+    # Urutkan model berdasarkan CV MAE saja
+    return sorted(scores.items(), key=lambda item: item[1][0]["mae"])
+
