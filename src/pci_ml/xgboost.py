@@ -11,30 +11,19 @@ tag = DataSplit.make_tag
 ROOT_DIR = Path(__file__).resolve().parents[2]
 models_dir = ROOT_DIR / "models"
 
-# Toleransi selisih CV MAE agar kandidat yang hampir seri tidak dipilih karena noise.
-XGB_TIE_TOL = 0.01
-
-# Semakin besar skor sampling, semakin banyak data/fitur yang dipakai tiap pohon.
-def _xgb_sample_score(params):
-    return params.get("subsample", 1.0) * params.get("colsample_bytree", 1.0)
-
 # Hyperparameter tuning xgb
 def best_xgb_candidate(candidates, features, target, seed, cv):
-    results = []
+    best_mae, best_params, best_oof = float("inf"), None, None
 
     for params in candidates:
         model = XGBRegressor(**params, random_state=seed, verbosity=0)
         oof = cross_val_predict(model, features, target, cv=cv, n_jobs=-1)
         mae = mean_fold_mae(target, oof, cv)
-        results.append((mae, params, oof))
 
-    if not results:
-        return float("inf"), None, None
+        if mae < best_mae:
+            best_mae, best_params, best_oof = mae, params, oof
 
-    best_mae = min(row[0] for row in results)
-    tied = [row for row in results if row[0] <= best_mae + XGB_TIE_TOL]
-    tied.sort(key=lambda row: (-_xgb_sample_score(row[1]), row[0]))
-    return tied[0]
+    return best_mae, best_params, best_oof
 
 # Save dan load model xgb
 def xgb_path(filename, params):
