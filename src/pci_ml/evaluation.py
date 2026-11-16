@@ -64,7 +64,6 @@ def save_eval_inputs(model, filename, params, best_params, search_space, best_ma
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
     print(f"Input evaluasi disimpan ke {path.relative_to(ROOT_DIR).as_posix()}")
-    return path
 
 
 # Muat input evaluasi. hidden_layers ANN kembali menjadi list setelah JSON,
@@ -147,4 +146,3 @@ def save_eval_outputs(model, filename, params, cv_score, test_score,
 
     print(f"Output evaluasi disimpan ke {path.relative_to(ROOT_DIR).as_posix()}")
     print(f"Prediksi per baris disimpan ke {csv_path.relative_to(ROOT_DIR).as_posix()}")
-    return path
