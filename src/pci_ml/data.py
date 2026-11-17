@@ -89,24 +89,22 @@ class DataSplit:
         if y_test.min() > self.pci_min:
             return None
 
-        # Hitung kemiripan distribusi jika lolos 3 kriteria
+        # Hitung gap sebagai deskripsi distribusi. Nilai ini tidak dipakai untuk
+        # memilih seed, hanya disimpan di meta untuk pelaporan.
         gap = (abs(y_train.mean() - y_test.mean())
                + abs(y_train.std(ddof=1) - y_test.std(ddof=1)))
         return gap, train_idx, test_idx
 
+    # Pilih seed valid pertama. Gap tidak lagi dipakai sebagai kriteria seleksi
+    # agar split tidak condong ke data uji yang mudah.
     def search(self):
-        best = None   # (gap, seed, train_idx, test_idx)
-
         for seed in range(self.n_seed):
             result = self._try_seed(seed)
-            if result and (best is None or result[0] < best[0]):
-                best = (result[0], seed, result[1], result[2])
+            if result is not None:
+                gap, train_idx, test_idx = result
+                return train_idx, test_idx, seed, float(gap)
 
-        if best is None:
-            raise ValueError("No seed passed the criteria.")
-
-        gap, seed, train_idx, test_idx = best
-        return train_idx, test_idx, seed, float(gap)
+        raise ValueError("No seed passed the criteria.")
 
     # Save data yang dipisah
     @staticmethod

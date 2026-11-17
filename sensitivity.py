@@ -1,7 +1,7 @@
 # Uji sensitivitas model terhadap variasi split data.
 # Seed split valid dicari dalam rentang 0..n_seed-1, lalu sejumlah seed dipilih
-# secara acak (di luar seed split yang sedang dipakai) dan tiap split diuji
-# dengan melatih ulang model pada hyperparameter hasil tuning notebook.
+# acak tanpa melihat gap (di luar seed split yang sedang dipakai) dan tiap split
+# diuji dengan melatih ulang model pada hyperparameter hasil tuning notebook.
 import argparse
 import json
 import time
@@ -34,7 +34,7 @@ OUT_DIR = ROOT_DIR / "outputs" / "sensitivity"
 
 DATASET = "pci-ml-26.xlsx"
 SPLIT_PARAMS = {
-    "n_seed": 200,
+    "n_seed": 100,
     "test_size": 0.2,
     "share_tol": 0.01,
     "pci_min": 0,
@@ -60,20 +60,20 @@ TUNED_PARAMS = {
     },
     "xgb": {
         "n_estimators": 300,
-        "max_depth": 4,
+        "max_depth": 5,
         "learning_rate": 0.1,
-        "subsample": 0.8,
-        "colsample_bytree": 0.4,
-        "min_child_weight": 1,
-        "gamma": 0.3,
-        "reg_lambda": 1,
+        "subsample": 0.6,
+        "colsample_bytree": 0.7,
+        "min_child_weight": 5,
+        "gamma": 0,
+        "reg_lambda": 3,
     },
     "ann": {
-        "hidden_layers": (128, 64, 32),
-        "activation": "tanh",
+        "hidden_layers": (64, 32),
+        "activation": "relu",
         "dropout": 0.1,
-        "learning_rate": 0.003,
-        "weight_decay": 0.0001,
+        "learning_rate": 0.0005,
+        "weight_decay": 0.001,
         "batch_size": 32,
     },
 }
@@ -89,7 +89,7 @@ def parse_args():
     )
     parser.add_argument(
         "--n-split-seeds", type=int, default=100,
-        help="Jumlah split seed yang diuji, tersebar dari gap terbesar ke terkecil.",
+        help="Jumlah split seed yang diuji, dipilih acak dari seed valid.",
     )
     parser.add_argument(
         "--n-seed", type=int, default=20000,
@@ -98,6 +98,10 @@ def parse_args():
     parser.add_argument(
         "--seed", type=int, default=SEED,
         help="Model seed.",
+    )
+    parser.add_argument(
+        "--split-seed", type=int, default=SEED,
+        help="Seed untuk memilih split acak dari daftar seed valid.",
     )
     parser.add_argument(
         "--cv-splits", type=int, default=CV_SPLITS,
@@ -268,10 +272,9 @@ def valid_split_seeds(splitter):
     return rows
 
 
-# Pilih split seed dari daftar seed valid, tanpa menyertakan seed split yang
-# sedang dipakai. Seed diurutkan berdasarkan gap (besar ke kecil), lalu diambil
-# merata sepanjang urutan tersebut agar variasi gap terwakili.
-def pick_split_seeds(valid, count, exclude_seed):
+# Pilih split seed secara acak dari daftar seed valid, tanpa melihat gap dan
+# tanpa menyertakan seed split yang sedang dipakai.
+def pick_split_seeds(valid, count, exclude_seed, seed):
     if count < 1:
         raise SystemExit("--n-split-seeds harus minimal 1.")
 
@@ -282,15 +285,9 @@ def pick_split_seeds(valid, count, exclude_seed):
             f"tidak cukup untuk {count} seed uji. Perbesar --n-seed."
         )
 
-    candidates.sort(key=lambda row: row[1], reverse=True)
-    index = np.linspace(0, len(candidates) - 1, count).round().astype(int)
-    index = list(dict.fromkeys(index.tolist()))
-    if len(index) < count:
-        raise SystemExit(
-            "Pemilihan seed tidak menghasilkan cukup indeks unik; "
-            "kurangi --n-split-seeds atau perbesar --n-seed."
-        )
-    return [candidates[i] for i in index]
+    rng = np.random.default_rng(seed)
+    index = rng.choice(len(candidates), size=count, replace=False)
+    return [candidates[i] for i in sorted(index.tolist())]
 
 
 def split_seed_stability(name, params, splitter, features, split_seeds,
@@ -425,6 +422,8 @@ def build_html(run, params_by_model, baseline, split_seed, summaries):
         ["Split seed saat ini", run["split_seed"]],
         ["Split gap saat ini", fmt(run["split_gap"])],
         ["Model seed", run["model_seed"]],
+        ["Pemilihan seed", run.get("split_selection", "random_valid")],
+        ["Seed sampling split", run.get("split_sample_seed", "tidak tersedia")],
         ["CV splits", run["cv_splits"]],
         ["Seed split yang diuji", ", ".join(str(seed) for seed in run["tested_split_seeds"])],
         ["Model", ", ".join(run["models"])],
@@ -536,9 +535,11 @@ def main():
         f"(di luar seed saat ini: {len([row for row in valid if row[0] != split_seed])})"
     )
 
-    split_seeds = pick_split_seeds(valid, args.n_split_seeds, split_seed)
+    split_seeds = pick_split_seeds(
+        valid, args.n_split_seeds, split_seed, args.split_seed
+    )
     print(
-        f"Split seed diuji (gap besar -> kecil): "
+        f"Split seed diuji (acak dari seed valid): "
         f"{', '.join(str(seed) for seed, _ in split_seeds)}"
     )
 
@@ -560,6 +561,8 @@ def main():
         "split_seed": split_seed,
         "split_gap": split_gap,
         "model_seed": int(args.seed),
+        "split_sample_seed": int(args.split_seed),
+        "split_selection": "random_valid",
         "cv_splits": int(args.cv_splits),
         "n_seed": int(args.n_seed),
         "tested_split_seeds": [int(seed) for seed, _ in split_seeds],
