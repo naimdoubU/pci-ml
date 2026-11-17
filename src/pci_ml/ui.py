@@ -6,18 +6,22 @@ TABLE_STYLE = "font-size: 10px; border-collapse: collapse; width: 100%; table-la
 CELL_STYLE = "padding: 2px 3px; word-break: break-word;"
 
 
-def _cell(tag, value, align):
-    return f"<{tag} style='{CELL_STYLE} text-align: {align};'>{html.escape(str(value))}</{tag}>"
+def _cell(tag, value, align, bold=False):
+    text = html.escape(str(value))
+    if bold:
+        text = f"<strong>{text}</strong>"
+    return f"<{tag} style='{CELL_STYLE} text-align: {align};'>{text}</{tag}>"
 
 
 # Fungsi dasar formatting tabel
-def format_table(headers, rows, aligns=None, center=False):
+def format_table(headers, rows, aligns=None, center=False, bold_rows=None):
     aligns = ["center"] * len(headers) if center else (aligns or ["left"] * len(headers))
+    bold_rows = set(bold_rows or [])
 
     head = "".join(_cell("th", h, a) for h, a in zip(headers, aligns))
     body = "".join(
-        "<tr>" + "".join(_cell("td", v, a) for v, a in zip(row, aligns)) + "</tr>"
-        for row in rows
+        "<tr>" + "".join(_cell("td", v, a, i in bold_rows) for v, a in zip(row, aligns)) + "</tr>"
+        for i, row in enumerate(rows)
     )
 
     return (
@@ -116,27 +120,24 @@ def model_comparison_table(ranked):
         ["Model", "CV MAE", "CV RMSE", "CV R²", "Test MAE", "Test RMSE", "Test R²"],
         rows,
         aligns=["left", "center", "center", "center", "center", "center", "center"],
+        bold_rows=[0],
     )
 
 
-# Ringkasan model terbaik: model peringkat pertama berdasarkan CV MAE, metrik
-# CV dan test-nya, serta selisih CV MAE terhadap peringkat kedua.
+# Ringkasan model terbaik: model peringkat pertama berdasarkan CV MAE dan
+# selisih CV MAE terhadap peringkat kedua.
 def model_selection_summary(ranked):
-    best_name, (best_cv, best_test) = ranked[0]
+    best_name, (best_cv, _) = ranked[0]
     margin = ranked[1][1][0]["mae"] - best_cv["mae"]
 
     return (
         f"**Model terbaik: {best_name}**\n\n"
-        f"- Cross-Validation — MAE {best_cv['mae']:.4f} | "
-        f"RMSE {best_cv['rmse']:.4f} | R² {best_cv['r2']:.4f}\n"
-        f"- Test — MAE {best_test['mae']:.4f} | "
-        f"RMSE {best_test['rmse']:.4f} | R² {best_test['r2']:.4f}\n\n"
         f"Kriteria seleksi: CV MAE. RMSE dan R² hanya untuk pelaporan. "
         f"Selisih CV MAE terhadap peringkat kedua: {margin:.4f}."
     )
 
 
-# Tampilkan perbandingan model: tabel metrik lalu ringkasan model terbaik.
+# Tampilkan perbandingan model: ringkasan model terbaik lalu tabel metrik.
 def show_model_comparison(ranked):
-    display(HTML(model_comparison_table(ranked)))
     display(Markdown(model_selection_summary(ranked)))
+    display(HTML(model_comparison_table(ranked)))
