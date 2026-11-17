@@ -35,3 +35,7 @@ wandb/
 mlruns/
 windows-models/
 outputs/
+
+# Markdown files, kecuali README
+*.md
+!README.md
