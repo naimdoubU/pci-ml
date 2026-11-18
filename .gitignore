@@ -24,17 +24,17 @@ Thumbs.db
 .env
 
 # Machine learning model files
-models/
-models/*.pkl
-models/*.joblib
-models/*.onnx
-models/*.pt
-models/*.pth
-models/*.h5
-wandb/
-mlruns/
-windows-models/
-outputs/
+# models/
+# models/*.pkl
+# models/*.joblib
+# models/*.onnx
+# models/*.pt
+# models/*.pth
+# models/*.h5
+# wandb/
+# mlruns/
+# windows-models/
+# outputs/
 
 # Markdown files, kecuali README
 *.md

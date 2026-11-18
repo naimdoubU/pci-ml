@@ -162,7 +162,7 @@ def save_test_predictions(model, filename, params, predictions, actual, road_inf
     table["residual"] = table["actual"] - table["predicted"]
     table.to_csv(path, index=False)
 
-    print(f"Prediksi test {model.upper():4}: {path.relative_to(ROOT_DIR).as_posix()}")
+    # print(f"Prediksi test {model.upper():4}: {path.relative_to(ROOT_DIR).as_posix()}")
     return path
 
 
