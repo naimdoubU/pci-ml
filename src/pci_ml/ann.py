@@ -232,7 +232,7 @@ def save_ann(model, filename, params, features=None):
         "state_dict": model.state_dict(),
     }
     torch.save(checkpoint, path)
-    print(f"Model saved to {path.relative_to(ROOT_DIR).as_posix()}")
+    print(f"Model        : {path.relative_to(ROOT_DIR).as_posix()}")
     return path
 
 def load_ann(filename, params):

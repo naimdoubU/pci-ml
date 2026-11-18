@@ -34,13 +34,16 @@ def save_xgb(model, filename, params):
     path = xgb_path(filename, params)
     path.parent.mkdir(parents=True, exist_ok=True)
     model.save_model(path)
-    print(f"Model saved to {path.relative_to(ROOT_DIR).as_posix()}")
+    print(f"Model        : {path.relative_to(ROOT_DIR).as_posix()}")
     return path
 
 def load_xgb(filename, params):
     model = XGBRegressor()
     model.load_model(xgb_path(filename, params))
     return model
+
+def predict_xgb(model, features):
+    return model.predict(features)
 
 # XGB hyperparameter table
 XGB_PARAM_EXPLANATIONS = {

@@ -106,15 +106,20 @@ def show_report(best_params, search_space, cv_score, test_score, explanations):
 
 
 # Tabel perbandingan model: metrik CV dan test tiap model, sudah terurut
-# berdasarkan CV MAE. Input berupa list (nama, (cv_score, test_score)).
+# berdasarkan CV MAE. Input berupa list (nama, scores_dict) dengan
+# scores_dict = {"cv_score", "cv_folds", "test_score"}.
 def model_comparison_table(ranked):
     rows = [
         [
             name,
-            f"{cv['mae']:.4f}", f"{cv['rmse']:.4f}", f"{cv['r2']:.4f}",
-            f"{test['mae']:.4f}", f"{test['rmse']:.4f}", f"{test['r2']:.4f}",
+            f"{scores['cv_score']['mae']:.4f}",
+            f"{scores['cv_score']['rmse']:.4f}",
+            f"{scores['cv_score']['r2']:.4f}",
+            f"{scores['test_score']['mae']:.4f}",
+            f"{scores['test_score']['rmse']:.4f}",
+            f"{scores['test_score']['r2']:.4f}",
         ]
-        for name, (cv, test) in ranked
+        for name, scores in ranked
     ]
     return format_table(
         ["Model", "CV MAE", "CV RMSE", "CV R²", "Test MAE", "Test RMSE", "Test R²"],
@@ -124,20 +129,22 @@ def model_comparison_table(ranked):
     )
 
 
-# Ringkasan model terbaik: model peringkat pertama berdasarkan CV MAE dan
-# selisih CV MAE terhadap peringkat kedua.
-def model_selection_summary(ranked):
-    best_name, (best_cv, _) = ranked[0]
-    margin = ranked[1][1][0]["mae"] - best_cv["mae"]
+# Ringkasan model terbaik: model peringkat pertama berdasarkan CV MAE dengan
+# 1-SE rule, tie-break CV RMSE, dan selisih CV MAE terhadap peringkat kedua.
+def model_selection_summary(ranked, se, band, tie_break):
+    best_name, best_scores = ranked[0]
+    margin = ranked[1][1]["cv_score"]["mae"] - best_scores["cv_score"]["mae"]
+    tie_text = "tie-break CV RMSE dipakai" if tie_break else "tidak ada tie-break"
 
     return (
         f"**Model terbaik: {best_name}**\n\n"
-        f"Kriteria seleksi: CV MAE. RMSE dan R² hanya untuk pelaporan. "
+        f"Kriteria seleksi: CV MAE, 1-SE rule (SE = {se:.4f}; batas {band:.4f}), "
+        f"{tie_text}. "
         f"Selisih CV MAE terhadap peringkat kedua: {margin:.4f}."
     )
 
 
 # Tampilkan perbandingan model: ringkasan model terbaik lalu tabel metrik.
-def show_model_comparison(ranked):
-    display(Markdown(model_selection_summary(ranked)))
+def show_model_comparison(ranked, se, band, tie_break):
+    display(Markdown(model_selection_summary(ranked, se, band, tie_break)))
     display(HTML(model_comparison_table(ranked)))

@@ -36,11 +36,14 @@ def save_rf(model, filename, params):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Kompresi zlib level 3: ukuran file turun sekitar 3 kali tanpa mengubah isi model
     joblib.dump(model, path, compress=3)
-    print(f"Model saved to {path.relative_to(ROOT_DIR).as_posix()}")
+    print(f"Model        : {path.relative_to(ROOT_DIR).as_posix()}")
     return path
 
 def load_rf(filename, params):
     return joblib.load(rf_path(filename, params))
+
+def predict_rf(model, features):
+    return model.predict(features)
 
 # RF hyperparameter table
 RF_PARAM_EXPLANATIONS = {

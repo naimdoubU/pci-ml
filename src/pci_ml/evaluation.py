@@ -2,9 +2,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from pci_ml.data import DataSplit
+from pci_ml.model import score_prediction
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 models_dir = ROOT_DIR / "models"
@@ -29,9 +31,40 @@ def eval_path(model, filename, params):
     return model_dir(filename, params) / f"{Path(filename).stem}_{model}_eval.json"
 
 
-# Path tabel nilai prediksi per baris untuk data CV dan test
-def predictions_path(model, filename, params):
-    return model_dir(filename, params) / f"{Path(filename).stem}_{model}_predictions.csv"
+# Path tabel nilai prediksi out-of-fold khusus data CV
+def cv_predictions_path(model, filename, params):
+    return model_dir(filename, params) / f"{Path(filename).stem}_{model}_cv_predictions.csv"
+
+
+# Folder hasil prediksi test
+def test_predictions_dir(filename, params):
+    stem = Path(filename).stem
+    return ROOT_DIR / "outputs" / "predictions" / DataSplit.make_tag(params)
+
+
+# Hitung metrik CV: skor gabungan OOF, rata-rata per fold, dan metrik tiap fold
+def cv_metrics(actual, predicted, folds):
+    actual, predicted = np.asarray(actual), np.asarray(predicted)
+
+    fold_rows = []
+    for i, (_, valid_idx) in enumerate(folds, start=1):
+        valid_idx = np.asarray(valid_idx)
+        score = score_prediction(actual[valid_idx], predicted[valid_idx])
+        fold_rows.append({
+            "fold": i,
+            "n": int(len(valid_idx)),
+            **{key: float(value) for key, value in score.items()},
+        })
+
+    metric_names = ("mae", "rmse", "r2")
+    return {
+        "cv_score": {key: float(value) for key, value in score_prediction(actual, predicted).items()},
+        "cv_mean_fold": {
+            metric: float(np.mean([row[metric] for row in fold_rows]))
+            for metric in metric_names
+        },
+        "cv_folds": fold_rows,
+    }
 
 
 # Simpan seluruh input sel load/prediksi yang berasal dari proses tuning.
@@ -63,7 +96,74 @@ def save_eval_inputs(model, filename, params, best_params, search_space, best_ma
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
-    print(f"Input evaluasi disimpan ke {path.relative_to(ROOT_DIR).as_posix()}")
+    print(f"Evaluasi CV  : {path.relative_to(ROOT_DIR).as_posix()}")
+
+
+# Simpan prediksi out-of-fold per baris untuk data CV saja
+def save_cv_predictions(model, filename, params, oof, actual, road_info, folds):
+    path = cv_predictions_path(model, filename, params)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    fold_ids = np.empty(len(actual), dtype=int)
+    for i, (_, valid_idx) in enumerate(folds, start=1):
+        fold_ids[np.asarray(valid_idx)] = i
+
+    table = road_info.copy()
+    table.insert(0, "fold", fold_ids)
+    table.insert(1, "row_index", range(len(table)))
+    table["actual"] = actual
+    table["predicted"] = oof
+    table["residual"] = table["actual"] - table["predicted"]
+    table.to_csv(path, index=False)
+
+    print(f"Prediksi OOF : {path.relative_to(ROOT_DIR).as_posix()}")
+    return path
+
+
+# Tambahkan hasil evaluasi CV ke JSON evaluasi tanpa menyentuh data test.
+# Blok outputs.cv_* terpisah dari outputs.test_* yang nanti diisi stage prediksi.
+def save_cv_outputs(model, filename, params, metrics, cv_predictions, plot_path):
+    path = eval_path(model, filename, params)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Input evaluasi tidak ditemukan: {path.relative_to(ROOT_DIR).as_posix()}. "
+            "Jalankan sel tuning model terlebih dahulu."
+        )
+
+    with open(path, encoding="utf-8") as f:
+        payload = json.load(f)
+
+    payload["format_version"] = 2
+    outputs = payload.get("outputs") or {}
+    outputs.update({
+        "cv_score": metrics["cv_score"],
+        "cv_mean_fold": metrics["cv_mean_fold"],
+        "cv_folds": metrics["cv_folds"],
+        "cv_predictions_path": cv_predictions.relative_to(ROOT_DIR).as_posix(),
+        "plot_path": plot_path.relative_to(ROOT_DIR).as_posix(),
+        "cv_saved_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
+    })
+    payload["outputs"] = outputs
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, ensure_ascii=False)
+
+
+# Simpan prediksi test per model ke outputs/predictions/<tag>/
+def save_test_predictions(model, filename, params, predictions, actual, road_info):
+    dir_path = test_predictions_dir(filename, params)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    path = dir_path / f"{Path(filename).stem}_{model}_test_predictions.csv"
+
+    table = road_info.copy()
+    table.insert(0, "row_index", range(len(table)))
+    table["actual"] = actual
+    table["predicted"] = predictions
+    table["residual"] = table["actual"] - table["predicted"]
+    table.to_csv(path, index=False)
+
+    print(f"Prediksi test {model.upper():4}: {path.relative_to(ROOT_DIR).as_posix()}")
+    return path
 
 
 # Muat input evaluasi. hidden_layers ANN kembali menjadi list setelah JSON,
@@ -91,58 +191,3 @@ def load_eval(model, filename, params):
         )
 
     return payload
-
-
-# Susun tabel nilai prediksi per baris: blok CV (out-of-fold) lalu blok test
-def prediction_table(oof, test_predictions, train_pci, train_road_info,
-                     test_pci, test_road_info):
-    train = train_road_info.copy()
-    train.insert(0, "split", "cv")
-    train.insert(1, "row_index", range(len(train)))
-    train["actual"] = train_pci
-    train["predicted"] = oof
-    train["residual"] = train["actual"] - train["predicted"]
-
-    test = test_road_info.copy()
-    test.insert(0, "split", "test")
-    test.insert(1, "row_index", range(len(test)))
-    test["actual"] = test_pci
-    test["predicted"] = test_predictions
-    test["residual"] = test["actual"] - test["predicted"]
-
-    return pd.concat([train, test], ignore_index=True)
-
-
-# Simpan output sel load/prediksi: metrik dan nilai prediksi test di JSON,
-# serta tabel nilai prediksi per baris (CV dan test) di CSV.
-def save_eval_outputs(model, filename, params, cv_score, test_score,
-                      test_predictions, train_pci, train_road_info,
-                      test_pci, test_road_info):
-    path = eval_path(model, filename, params)
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Input evaluasi tidak ditemukan: {path.relative_to(ROOT_DIR).as_posix()}. "
-            "Jalankan sel tuning model terlebih dahulu."
-        )
-
-    with open(path, encoding="utf-8") as f:
-        payload = json.load(f)
-
-    payload["outputs"] = {
-        "cv_score": {key: float(value) for key, value in cv_score.items()},
-        "test_score": {key: float(value) for key, value in test_score.items()},
-        "test_predictions": [float(v) for v in test_predictions],
-        "saved_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
-    }
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
-
-    csv_path = predictions_path(model, filename, params)
-    prediction_table(
-        payload["oof"], test_predictions, train_pci, train_road_info,
-        test_pci, test_road_info,
-    ).to_csv(csv_path, index=False)
-
-    print(f"Output evaluasi disimpan ke {path.relative_to(ROOT_DIR).as_posix()}")
-    print(f"Prediksi per baris disimpan ke {csv_path.relative_to(ROOT_DIR).as_posix()}")
