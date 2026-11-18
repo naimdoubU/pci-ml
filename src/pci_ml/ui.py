@@ -33,12 +33,12 @@ def format_table(headers, rows, aligns=None, center=False, bold_rows=None):
 
 
 # Preview tabel dataset
-def df_preview(df_input, n_rows=19, left_count=6, right_count=1):
+def df_preview(df_input, n_rows=5, left_count=6, right_count=1):
     if df_input is None:
         return ""
 
-    more_rows = len(df_input) > n_rows
-    df_head = df_input.head(n_rows)
+    more_rows = len(df_input) > 2 * n_rows
+    df_head = pd.concat([df_input.head(n_rows), df_input.tail(n_rows)]) if more_rows else df_input
 
     if df_head.shape[1] > (left_count + right_count):
         left_cols = df_head.iloc[:, :left_count]
@@ -52,7 +52,7 @@ def df_preview(df_input, n_rows=19, left_count=6, right_count=1):
     rows = df_display.map(_format_cell).values.tolist()
 
     if more_rows:
-        rows.append(["..."] * len(headers))
+        rows.insert(n_rows, ["..."] * len(headers))
 
     return format_table(headers, rows, center=True)
 
