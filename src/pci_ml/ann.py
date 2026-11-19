@@ -8,7 +8,7 @@ from torch import nn
 
 from pci_ml.model import mean_fold_mae
 from pci_ml.data import DataSplit
-from pci_ml.ui import evaluation_table, param_table, show_report
+from pci_ml.ui import param_table
 
 tag = DataSplit.make_tag
 
@@ -276,11 +276,3 @@ ANN_PARAM_EXPLANATIONS = {
 
 def ann_param_table(best_params, search_space, explanations=ANN_PARAM_EXPLANATIONS):
     return param_table(best_params, search_space, explanations)
-
-
-def ann_evaluation_table(cv_score, test_score):
-    return evaluation_table(cv_score, test_score)
-
-
-def show_ann_report(best_params, search_space, cv_score, test_score):
-    show_report(best_params, search_space, cv_score, test_score, ANN_PARAM_EXPLANATIONS)

@@ -3,7 +3,6 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from pci_ml.data import DataSplit
 from pci_ml.model import score_prediction
@@ -37,8 +36,7 @@ def cv_predictions_path(model, filename, params):
 
 
 # Folder hasil prediksi test
-def test_predictions_dir(filename, params):
-    stem = Path(filename).stem
+def test_predictions_dir(params):
     return ROOT_DIR / "outputs" / "predictions" / DataSplit.make_tag(params)
 
 
@@ -151,7 +149,7 @@ def save_cv_outputs(model, filename, params, metrics, cv_predictions, plot_path)
 
 # Simpan prediksi test per model ke outputs/predictions/<tag>/
 def save_test_predictions(model, filename, params, predictions, actual, road_info):
-    dir_path = test_predictions_dir(filename, params)
+    dir_path = test_predictions_dir(params)
     dir_path.mkdir(parents=True, exist_ok=True)
     path = dir_path / f"{Path(filename).stem}_{model}_test_predictions.csv"
 

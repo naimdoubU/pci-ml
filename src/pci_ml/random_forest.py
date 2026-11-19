@@ -5,7 +5,7 @@ from sklearn.model_selection import cross_val_predict
 
 from pci_ml.model import mean_fold_mae
 from pci_ml.data import DataSplit
-from pci_ml.ui import evaluation_table, param_table, show_report
+from pci_ml.ui import param_table
 
 tag = DataSplit.make_tag
 
@@ -57,11 +57,3 @@ RF_PARAM_EXPLANATIONS = {
 
 def rf_param_table(best_params, search_space, explanations=RF_PARAM_EXPLANATIONS):
     return param_table(best_params, search_space, explanations)
-
-
-def rf_evaluation_table(cv_score, test_score):
-    return evaluation_table(cv_score, test_score)
-
-
-def show_rf_report(best_params, search_space, cv_score, test_score):
-    show_report(best_params, search_space, cv_score, test_score, RF_PARAM_EXPLANATIONS)

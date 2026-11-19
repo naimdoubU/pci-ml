@@ -21,16 +21,12 @@ from pci_ml.ui import format_table
 from pci_ml.xgboost import load_xgb, predict_xgb
 
 SUFFIXES = tuple(LEVEL_SUFFIXES.values())
-MODEL_REGISTRY = {
+MODELS = {
     "rf": ("Random Forest", load_rf, predict_rf),
     "xgb": ("XGBoost", load_xgb, predict_xgb),
     "ann": ("ANN", load_ann, predict_ann),
 }
-MODEL_ALIASES = {
-    "rf": "rf", "randomforest": "rf",
-    "xgb": "xgb", "xgboost": "xgb",
-    "ann": "ann",
-}
+ALIASES = {"randomforest": "rf", "xgboost": "xgb"}
 
 
 class _AnnPciModel(torch.nn.Module):
@@ -45,28 +41,29 @@ class _AnnPciModel(torch.nn.Module):
 
 def resolve_model(model_name):
     key = "".join(ch for ch in str(model_name).lower() if ch.isalnum())
-    if key not in MODEL_ALIASES:
+    key = ALIASES.get(key, key)
+    if key not in MODELS:
         raise ValueError(f"Model tidak dikenal: {model_name}")
-    return MODEL_ALIASES[key]
+    return key
 
 
-def _distress_type(feature_name):
-    if feature_name in ENGINEERED_FEATURES:
-        return None
-    for suffix in SUFFIXES:
-        if feature_name.endswith(suffix):
-            return feature_name[: -len(suffix)]
-    return feature_name
+def _distress_groups(feature_names):
+    groups = {}
+    for index, name in enumerate(feature_names):
+        if name in ENGINEERED_FEATURES:
+            continue
+        for suffix in SUFFIXES:
+            if name.endswith(suffix):
+                name = name[: -len(suffix)]
+                break
+        groups.setdefault(name, []).append(index)
+    return groups
 
 
 def _direction(signed_shap):
     if np.isnan(signed_shap):
         return "n/a"
-    if signed_shap > 0:
-        return "positif"
-    if signed_shap < 0:
-        return "negatif"
-    return "netral"
+    return "positif" if signed_shap > 0 else "negatif" if signed_shap < 0 else "netral"
 
 
 def _normalise_values(values):
@@ -81,14 +78,6 @@ def _normalise_values(values):
     if values.ndim != 2:
         raise ValueError(f"Bentuk nilai SHAP tidak didukung: {values.shape}")
     return values
-
-
-def _predict_ann_raw(model, features):
-    model.eval()
-    with torch.no_grad():
-        x = torch.as_tensor(np.asarray(features, dtype="float32"), dtype=torch.float32)
-        predicted = model(x) * model.target_scale + model.target_mean
-    return predicted.cpu().numpy()
 
 
 def _make_explainer(model_key, model, baseline):
@@ -107,7 +96,7 @@ def _make_explainer(model_key, model, baseline):
     except Exception as exc:
         print(f"PERINGATAN: DeepExplainer gagal ({exc}); memakai KernelExplainer.")
         explainer = shap.KernelExplainer(
-            lambda x: _predict_ann_raw(model, x), baseline
+            lambda x: predict_ann(model, x), baseline
         )
         return explainer, "KernelExplainer"
 
@@ -125,14 +114,40 @@ def _base_value(explainer):
     return float(np.asarray(explainer.expected_value).reshape(-1)[0])
 
 
-def distress_type_table(values, features, feature_names):
-    groups = {}
-    for index, name in enumerate(feature_names):
-        if name not in ENGINEERED_FEATURES:
-            groups.setdefault(_distress_type(name), []).append(index)
+def explain_model(best_model_name, dataset, params, test_features, feature_names):
+    model_key = resolve_model(best_model_name)
+    model_name, load_model, predict_model = MODELS[model_key]
+    feature_names = list(feature_names)
+    test_features = np.asarray(test_features, dtype="float32")
+    baseline = np.zeros((1, len(feature_names)), dtype="float32")
 
+    model = load_model(dataset, params)
+    baseline_pci = float(np.asarray(predict_model(model, baseline)).reshape(-1)[0])
+    explainer, explainer_name = _make_explainer(model_key, model, baseline)
+    values = _normalise_values(_shap_values(explainer, explainer_name, test_features))
+    base_value = _base_value(explainer)
+
+    if values.shape != test_features.shape:
+        raise ValueError(
+            f"Bentuk nilai SHAP {values.shape} tidak cocok dengan data {test_features.shape}."
+        )
+
+    predicted = np.asarray(predict_model(model, test_features), dtype="float64").reshape(-1)
+    return {
+        "model": model_name,
+        "model_key": model_key,
+        "explainer": explainer_name,
+        "baseline_pci": baseline_pci,
+        "base_value": base_value,
+        "feature_names": feature_names,
+        "values": values,
+        "predicted": predicted,
+    }
+
+
+def distress_type_table(values, features, feature_names):
     rows = []
-    for name, indices in groups.items():
+    for name, indices in _distress_groups(feature_names).items():
         grouped = values[:, indices].sum(axis=1)
         present = features[:, indices].sum(axis=1) > 0
         mean_signed = float(grouped.mean())
@@ -147,9 +162,7 @@ def distress_type_table(values, features, feature_names):
                 -float(grouped[present].mean()) if present.any() else np.nan
             ),
             "mean_pci_reduction_all": -mean_signed,
-            "direction": (
-                "n/a" if not present.any() else _direction(mean_signed)
-            ),
+            "direction": "n/a" if not present.any() else _direction(mean_signed),
         })
 
     table = pd.DataFrame(rows)
@@ -158,13 +171,9 @@ def distress_type_table(values, features, feature_names):
         table["mean_abs_shap"] / total_abs if total_abs else 0.0
     )
 
-    total_reduction = float(
-        table["mean_pci_reduction_present"].clip(lower=0).fillna(0).sum()
-    )
-    table["share_of_total_reduction"] = (
-        table["mean_pci_reduction_present"].clip(lower=0).fillna(0) / total_reduction
-        if total_reduction else 0.0
-    )
+    reduction = table["mean_pci_reduction_present"].clip(lower=0).fillna(0)
+    total_reduction = float(reduction.sum())
+    table["share_of_total_reduction"] = reduction / total_reduction if total_reduction else 0.0
 
     table = table.sort_values(
         ["mean_abs_shap", "distress_type"], ascending=[False, True]
@@ -175,61 +184,95 @@ def distress_type_table(values, features, feature_names):
 
 def engineered_table(values, feature_names):
     mean_abs_all = np.abs(values).mean(axis=0)
+    mean_signed_all = values.mean(axis=0)
     total = float(mean_abs_all.sum())
-    rows = []
-    for index, name in enumerate(feature_names):
-        if name not in ENGINEERED_FEATURES:
-            continue
-        mean_signed = float(values[:, index].mean())
-        mean_abs = float(mean_abs_all[index])
-        rows.append({
-            "feature": name,
-            "mean_abs_shap": mean_abs,
-            "mean_signed_shap": mean_signed,
-            "mean_pci_reduction_all": -mean_signed,
-            "share_of_all_features": mean_abs / total if total else 0.0,
-            "direction": _direction(mean_signed),
-        })
+    indices = [i for i, name in enumerate(feature_names) if name in ENGINEERED_FEATURES]
 
-    return pd.DataFrame(rows).sort_values(
+    table = pd.DataFrame({
+        "feature": [feature_names[i] for i in indices],
+        "mean_abs_shap": mean_abs_all[indices],
+        "mean_signed_shap": mean_signed_all[indices],
+    })
+    table["mean_pci_reduction_all"] = -table["mean_signed_shap"]
+    table["share_of_all_features"] = table["mean_abs_shap"] / total if total else 0.0
+    table["direction"] = table["mean_signed_shap"].map(_direction)
+
+    return table.sort_values(
         ["mean_abs_shap", "feature"], ascending=[False, True]
     ).reset_index(drop=True)
 
 
-def _display_distress_types(data):
+def build_shap_values_table(result, road_info=None, actual=None):
+    values = result["values"]
+    n_rows = len(values)
+    rows = {}
+
+    if road_info is not None:
+        info = road_info.reset_index(drop=True)
+        if len(info) != n_rows:
+            raise ValueError("Jumlah road_info tidak cocok dengan jumlah baris test.")
+        rows.update({column: info[column].to_numpy() for column in info.columns})
+
+    rows["predicted"] = result["predicted"]
+    if actual is not None:
+        actual = np.asarray(actual, dtype="float64").reshape(-1)
+        if len(actual) != n_rows:
+            raise ValueError("Jumlah actual tidak cocok dengan jumlah baris test.")
+        rows["actual"] = actual
+
+    rows["base_value"] = np.full(n_rows, result["base_value"])
+    rows.update({
+        f"shap_{name}": values[:, index]
+        for index, name in enumerate(result["feature_names"])
+    })
+    rows["sum_shap"] = values.sum(axis=1)
+    rows["reconstructed_prediction"] = result["base_value"] + rows["sum_shap"]
+    rows["reconstruction_error"] = result["predicted"] - rows["reconstructed_prediction"]
+    return pd.DataFrame(rows)
+
+
+def _display_table(title, headers, rows, aligns):
+    display(HTML(
+        f"<div style='font-weight: 600; margin: 4px 0;'>{title}</div>"
+        + format_table(headers, rows, aligns=aligns)
+    ))
+
+
+def show_shap_summary(result):
+    display(Markdown(
+        f"**Model:** {result['model']} | "
+        f"**Explainer:** {result['explainer']} | "
+        f"**Baseline tanpa kerusakan:** {result['baseline_pci']:.2f} PCI | "
+        f"**Sampel test:** {len(result['values'])} baris"
+    ))
+
+
+def show_shap_tables(type_ranking, engineered):
     rows = [
         [int(row.rank), row.distress_type, f"{row.mean_abs_shap:.4f}",
          f"{row.share_of_total_contribution:.2%}", f"{row.mean_signed_shap:.4f}",
          row.direction]
-        for row in data.itertuples()
+        for row in type_ranking.itertuples()
     ]
-    table = format_table(
+    _display_table(
+        "Kontribusi 19 jenis kerusakan",
         ["Peringkat", "Jenis Kerusakan", "Mean |SHAP|", "Kontribusi", "Mean SHAP", "Arah"],
         rows,
-        aligns=["center", "left", "center", "center", "center", "left"],
+        ["center", "left", "center", "center", "center", "left"],
     )
-    display(HTML(
-        "<div style='font-weight: 600; margin: 4px 0;'>"
-        "Kontribusi 19 jenis kerusakan</div>" + table
-    ))
 
-
-def _display_engineered(data):
     rows = [
         [row.feature, f"{row.mean_abs_shap:.4f}", f"{row.mean_signed_shap:.4f}",
          f"{row.mean_pci_reduction_all:.4f}", f"{row.share_of_all_features:.2%}",
          row.direction]
-        for row in data.itertuples()
+        for row in engineered.itertuples()
     ]
-    table = format_table(
+    _display_table(
+        "Fitur agregat hasil rekayasa (dilaporkan terpisah)",
         ["Fitur", "Mean |SHAP|", "Mean SHAP", "Penurunan PCI", "Share semua fitur", "Arah"],
         rows,
-        aligns=["left", "center", "center", "center", "center", "left"],
+        ["left", "center", "center", "center", "center", "left"],
     )
-    display(HTML(
-        "<div style='font-weight: 600; margin: 4px 0;'>"
-        "Fitur agregat hasil rekayasa (dilaporkan terpisah)</div>" + table
-    ))
 
 
 def _finish_figure(fig, save_path, show):
@@ -266,141 +309,59 @@ def plot_distress_type_importance(table, model_name, baseline_pci, save_path=Non
     return fig
 
 
-def _paths(filename, params, model_key):
-    stem = Path(filename).stem
+def save_shap_outputs(result, type_ranking, values_table, dataset, params):
+    stem = Path(dataset).stem
     shap_dir = ROOT_DIR / "outputs" / "shap" / DataSplit.make_tag(params)
-    return {
+    model_key = result["model_key"]
+    paths = {
         "values": shap_dir / f"{stem}_{model_key}_shap_values.csv",
         "type_ranking": shap_dir / f"{stem}_{model_key}_shap_distress_type_ranking.csv",
         "meta": shap_dir / f"{stem}_{model_key}_shap_meta.json",
         "type_plot": figure_path(f"06_shap_distress_type_importance_{model_key}.png", params),
     }
+    meta = {
+        "format_version": 2,
+        "model": result["model"],
+        "model_key": result["model_key"],
+        "split_tag": DataSplit.make_tag(params),
+        "explainer": result["explainer"],
+        "shap_version": shap.__version__,
+        "baseline": "semua fitur distress = 0; TOTAL_DENSITY/TOTAL_L/TOTAL_M/TOTAL_H = 0",
+        "baseline_pci": result["baseline_pci"],
+        "base_value": result["base_value"],
+        "ranking_basis": "mean_abs_shap",
+        "direction_note": "arah tanda mean_signed_shap: positif atau negatif",
+        "reduction_note": "mean_pci_reduction_present adalah analisis pendukung",
+        "presence_definition": "total nilai mentah distress type > 0",
+        "n_explained": int(len(result["values"])),
+        "n_features": int(len(result["feature_names"])),
+        "n_distress_types": int(len(type_ranking)),
+        "engineered_features": list(ENGINEERED_FEATURES),
+        "engineered_feature_note": (
+            "Fitur agregat tidak dimasukkan ke ranking distress karena "
+            "merupakan penjumlahan fitur mentah; pengaruhnya dilaporkan terpisah."
+        ),
+        "top_distress_types": [
+            {
+                "rank": int(row.rank),
+                "distress_type": row.distress_type,
+                "mean_abs_shap": float(row.mean_abs_shap),
+                "share_of_total_contribution": float(row.share_of_total_contribution),
+                "mean_signed_shap": float(row.mean_signed_shap),
+                "direction": row.direction,
+            }
+            for row in type_ranking.head(10).itertuples()
+        ],
+        "paths": {name: str(path.relative_to(ROOT_DIR).as_posix())
+                  for name, path in paths.items()},
+        "created_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
+    }
 
-
-def _save(values_table, type_table, meta, paths):
     for path in (paths["values"], paths["type_ranking"], paths["meta"]):
         path.parent.mkdir(parents=True, exist_ok=True)
 
     values_table.to_csv(paths["values"], index=False)
-    type_table.to_csv(paths["type_ranking"], index=False)
+    type_ranking.to_csv(paths["type_ranking"], index=False)
     with open(paths["meta"], "w", encoding="utf-8") as file:
         json.dump(meta, file, indent=2, ensure_ascii=False, default=str)
-
-
-def explain_best_model(best_model_name, dataset, params, test_features, feature_names,
-                       road_info=None, actual=None, save=True, show=True):
-    model_key = resolve_model(best_model_name)
-    model_name, load_model, predict_model = MODEL_REGISTRY[model_key]
-    feature_names = list(feature_names)
-    test_features = np.asarray(test_features, dtype="float32")
-    baseline = np.zeros((1, len(feature_names)), dtype="float32")
-
-    model = load_model(dataset, params)
-    baseline_pci = float(np.asarray(predict_model(model, baseline)).reshape(-1)[0])
-    explainer, explainer_name = _make_explainer(model_key, model, baseline)
-    values = _normalise_values(_shap_values(explainer, explainer_name, test_features))
-    base_value = _base_value(explainer)
-
-    if values.shape != test_features.shape:
-        raise ValueError(
-            f"Bentuk nilai SHAP {values.shape} tidak cocok dengan data {test_features.shape}."
-        )
-
-    predicted = np.asarray(predict_model(model, test_features), dtype="float64").reshape(-1)
-    type_ranking = distress_type_table(values, test_features, feature_names)
-    engineered = engineered_table(values, feature_names)
-
-    rows = {}
-    if road_info is not None:
-        info = road_info.reset_index(drop=True)
-        if len(info) != len(test_features):
-            raise ValueError("Jumlah road_info tidak cocok dengan jumlah baris test.")
-        rows.update({column: info[column].to_numpy() for column in info.columns})
-
-    rows["predicted"] = predicted
-    if actual is not None:
-        actual = np.asarray(actual, dtype="float64").reshape(-1)
-        if len(actual) != len(test_features):
-            raise ValueError("Jumlah actual tidak cocok dengan jumlah baris test.")
-        rows["actual"] = actual
-
-    rows["base_value"] = np.full(len(test_features), base_value)
-    rows.update({f"shap_{name}": values[:, index]
-                 for index, name in enumerate(feature_names)})
-    rows["sum_shap"] = values.sum(axis=1)
-    rows["reconstructed_prediction"] = base_value + rows["sum_shap"]
-    rows["reconstruction_error"] = predicted - rows["reconstructed_prediction"]
-    values_table = pd.DataFrame(rows)
-    paths = _paths(dataset, params, model_key)
-
-    result = {
-        "model": model_name,
-        "model_key": model_key,
-        "explainer": explainer_name,
-        "baseline_pci": baseline_pci,
-        "base_value": base_value,
-        "distress_type_ranking": type_ranking,
-        "engineered_features": engineered,
-        "shap_values": values_table,
-        "paths": paths,
-    }
-
-    if save:
-        meta = {
-            "format_version": 2,
-            "model": model_name,
-            "model_key": model_key,
-            "split_tag": DataSplit.make_tag(params),
-            "explainer": explainer_name,
-            "shap_version": shap.__version__,
-            "baseline": "semua fitur distress = 0; TOTAL_DENSITY/TOTAL_L/TOTAL_M/TOTAL_H = 0",
-            "baseline_pci": baseline_pci,
-            "base_value": base_value,
-            "ranking_basis": "mean_abs_shap",
-            "direction_note": "arah tanda mean_signed_shap: positif atau negatif",
-            "reduction_note": "mean_pci_reduction_present adalah analisis pendukung",
-            "presence_definition": "total nilai mentah distress type > 0",
-            "n_explained": int(len(test_features)),
-            "n_features": int(len(feature_names)),
-            "n_distress_types": int(len(type_ranking)),
-            "engineered_features": list(ENGINEERED_FEATURES),
-            "engineered_feature_note": (
-                "Fitur agregat tidak dimasukkan ke ranking distress karena "
-                "merupakan penjumlahan fitur mentah; pengaruhnya dilaporkan terpisah."
-            ),
-            "top_distress_types": [
-                {
-                    "rank": int(row.rank),
-                    "distress_type": row.distress_type,
-                    "mean_abs_shap": float(row.mean_abs_shap),
-                    "share_of_total_contribution": float(row.share_of_total_contribution),
-                    "mean_signed_shap": float(row.mean_signed_shap),
-                    "direction": row.direction,
-                }
-                for row in type_ranking.head(10).itertuples()
-            ],
-            "paths": {name: str(path.relative_to(ROOT_DIR).as_posix())
-                      for name, path in paths.items()},
-            "created_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
-        }
-        _save(values_table, type_ranking, meta, paths)
-        result["meta"] = meta
-
-    if show:
-        display(Markdown(
-            f"**Model:** {model_name} | **Explainer:** {explainer_name} | "
-            f"**Baseline tanpa kerusakan:** {baseline_pci:.2f} PCI | "
-            f"**Sampel test:** {len(test_features)} baris"
-        ))
-
-    if show or save:
-        plot_distress_type_importance(
-            type_ranking, model_name, baseline_pci,
-            save_path=paths["type_plot"] if save else None, show=show,
-        )
-
-    if show:
-        _display_distress_types(type_ranking)
-        _display_engineered(engineered)
-
-    return result
+    return paths

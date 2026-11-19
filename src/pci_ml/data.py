@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime
-import numpy as np
 import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from pathlib import Path
@@ -192,7 +191,3 @@ class ModelInput:
         test_df = pd.read_csv(out_dir / "test.csv")
         meta = self._read_meta(tag)
         return train_df, test_df, meta["features"], meta
-
-    def load_params(self, params):
-        tag = self.find(params)
-        return (tag, *self.load(tag))

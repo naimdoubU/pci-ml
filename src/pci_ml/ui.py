@@ -83,28 +83,6 @@ def param_table(best_params, search_space, explanations):
     return build_hyperparameter_table(best_params, search_space.keys(), explanations)
 
 
-_METRICS = ("mae", "rmse", "r2")
-
-
-def _score_row(label, score):
-    return [label, *(f"{score[m]:.4f}" for m in _METRICS)]
-
-
-def evaluation_table(cv_score, test_score):
-    return format_table(
-        ["Evaluasi", "MAE", "RMSE", "R²"],
-        [_score_row("Cross-Validation", cv_score), _score_row("Test", test_score)],
-        aligns=["left", "center", "center", "center"],
-    )
-
-
-def show_report(best_params, search_space, cv_score, test_score, explanations):
-    display(Markdown("##### **Hyperparameter terbaik**"))
-    display(HTML(param_table(best_params, search_space, explanations)))
-    display(Markdown("##### **Hasil evaluasi**"))
-    display(HTML(evaluation_table(cv_score, test_score)))
-
-
 # Tabel perbandingan model: metrik CV dan test tiap model, sudah terurut
 # berdasarkan CV MAE. Input berupa list (nama, scores_dict) dengan
 # scores_dict = {"cv_score", "cv_folds", "test_score"}.
