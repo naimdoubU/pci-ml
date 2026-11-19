@@ -59,13 +59,6 @@ def _distress_type(feature_name):
     return feature_name
 
 
-def _severity(feature_name):
-    for suffix in SUFFIXES:
-        if feature_name.endswith(suffix):
-            return suffix[1:]
-    return "AGG"
-
-
 def _direction(signed_shap):
     if np.isnan(signed_shap):
         return "n/a"
@@ -180,17 +173,17 @@ def distress_type_table(values, features, feature_names):
     return table
 
 
-def feature_table(values, feature_names):
-    total = float(np.abs(values).mean(axis=0).sum())
+def engineered_table(values, feature_names):
+    mean_abs_all = np.abs(values).mean(axis=0)
+    total = float(mean_abs_all.sum())
     rows = []
     for index, name in enumerate(feature_names):
+        if name not in ENGINEERED_FEATURES:
+            continue
         mean_signed = float(values[:, index].mean())
-        mean_abs = float(np.abs(values[:, index]).mean())
+        mean_abs = float(mean_abs_all[index])
         rows.append({
             "feature": name,
-            "feature_group": "engineered" if name in ENGINEERED_FEATURES else "distress",
-            "distress_type": _distress_type(name) or "TOTAL",
-            "severity": _severity(name),
             "mean_abs_shap": mean_abs,
             "mean_signed_shap": mean_signed,
             "mean_pci_reduction_all": -mean_signed,
@@ -198,16 +191,9 @@ def feature_table(values, feature_names):
             "direction": _direction(mean_signed),
         })
 
-    table = pd.DataFrame(rows).sort_values(
+    return pd.DataFrame(rows).sort_values(
         ["mean_abs_shap", "feature"], ascending=[False, True]
     ).reset_index(drop=True)
-    table.insert(0, "rank", np.arange(1, len(table) + 1))
-    return table
-
-
-def engineered_table(table):
-    data = table[table["feature_group"] == "engineered"].copy()
-    return data.sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
 
 
 def _display_distress_types(data):
@@ -280,77 +266,29 @@ def plot_distress_type_importance(table, model_name, baseline_pci, save_path=Non
     return fig
 
 
-def plot_distress_type_reduction(table, model_name, baseline_pci, save_path=None, show=True):
-    ordered = table.sort_values(
-        "mean_pci_reduction_present", ascending=False, na_position="last"
-    ).reset_index(drop=True)
-    labels = [f"{rank}. {name}" for rank, name in zip(ordered.index + 1, ordered["distress_type"])]
-    data = ordered.iloc[::-1]
-    values = data["mean_pci_reduction_present"].fillna(0.0)
-    colors = ["#c0504d" if value > 0 else "#3b7ea1" for value in values]
-
-    fig, ax = plt.subplots(figsize=(11, 8))
-    bars = ax.barh(labels[::-1], values, color=colors)
-    ax.bar_label(
-        bars,
-        labels=["n/a" if np.isnan(value) else f"{value:.2f}"
-                for value in data["mean_pci_reduction_present"]],
-        padding=3,
-    )
-    ax.axvline(0, color="#333333", linewidth=1)
-    span = max(values.max() - min(values.min(), 0), 1.0)
-    ax.set_xlim(min(values.min(), 0) - 0.18 * span, values.max() + 0.20 * span)
-    ax.set(
-        xlabel="Mean penurunan PCI saat kerusakan muncul (PCI points)",
-        ylabel="Distress type",
-        title=(
-            f"SHAP Penurunan PCI per Distress Type — {model_name}\n"
-            f"Baseline tanpa kerusakan: {baseline_pci:.2f} PCI"
-        ),
-    )
-    ax.grid(axis="x", alpha=0.3)
-    fig.tight_layout()
-    _finish_figure(fig, save_path, show)
-    return fig
-
-
-def plot_shap_beeswarm(explanation, model_name, max_display=15, save_path=None, show=True):
-    shap.plots.beeswarm(explanation, max_display=max_display, show=False)
-    fig = plt.gcf()
-    fig.set_size_inches(12, 8)
-    fig.suptitle(f"SHAP Feature Beeswarm — {model_name}", y=1.02, fontsize=14)
-    _finish_figure(fig, save_path, show)
-    return fig
-
-
 def _paths(filename, params, model_key):
     stem = Path(filename).stem
     shap_dir = ROOT_DIR / "outputs" / "shap" / DataSplit.make_tag(params)
     return {
         "values": shap_dir / f"{stem}_{model_key}_shap_values.csv",
         "type_ranking": shap_dir / f"{stem}_{model_key}_shap_distress_type_ranking.csv",
-        "feature_ranking": shap_dir / f"{stem}_{model_key}_shap_feature_ranking.csv",
         "meta": shap_dir / f"{stem}_{model_key}_shap_meta.json",
         "type_plot": figure_path(f"06_shap_distress_type_importance_{model_key}.png", params),
-        "beeswarm_plot": figure_path(f"07_shap_feature_beeswarm_{model_key}.png", params),
-        "reduction_plot": figure_path(f"08_shap_pci_reduction_{model_key}.png", params),
     }
 
 
-def _save(values_table, type_table, features_table, meta, paths):
-    for path in (paths["values"], paths["type_ranking"],
-                 paths["feature_ranking"], paths["meta"]):
+def _save(values_table, type_table, meta, paths):
+    for path in (paths["values"], paths["type_ranking"], paths["meta"]):
         path.parent.mkdir(parents=True, exist_ok=True)
 
     values_table.to_csv(paths["values"], index=False)
     type_table.to_csv(paths["type_ranking"], index=False)
-    features_table.to_csv(paths["feature_ranking"], index=False)
     with open(paths["meta"], "w", encoding="utf-8") as file:
         json.dump(meta, file, indent=2, ensure_ascii=False, default=str)
 
 
 def explain_best_model(best_model_name, dataset, params, test_features, feature_names,
-                       road_info=None, actual=None, max_display=15, save=True, show=True):
+                       road_info=None, actual=None, save=True, show=True):
     model_key = resolve_model(best_model_name)
     model_name, load_model, predict_model = MODEL_REGISTRY[model_key]
     feature_names = list(feature_names)
@@ -368,17 +306,9 @@ def explain_best_model(best_model_name, dataset, params, test_features, feature_
             f"Bentuk nilai SHAP {values.shape} tidak cocok dengan data {test_features.shape}."
         )
 
-    explanation = shap.Explanation(
-        values=values,
-        base_values=np.full(len(test_features), base_value),
-        data=test_features,
-        feature_names=feature_names,
-    )
-
     predicted = np.asarray(predict_model(model, test_features), dtype="float64").reshape(-1)
     type_ranking = distress_type_table(values, test_features, feature_names)
-    features_table = feature_table(values, feature_names)
-    engineered = engineered_table(features_table)
+    engineered = engineered_table(values, feature_names)
 
     rows = {}
     if road_info is not None:
@@ -409,9 +339,7 @@ def explain_best_model(best_model_name, dataset, params, test_features, feature_
         "explainer": explainer_name,
         "baseline_pci": baseline_pci,
         "base_value": base_value,
-        "explanation": explanation,
         "distress_type_ranking": type_ranking,
-        "feature_ranking": features_table,
         "engineered_features": engineered,
         "shap_values": values_table,
         "paths": paths,
@@ -455,7 +383,7 @@ def explain_best_model(best_model_name, dataset, params, test_features, feature_
                       for name, path in paths.items()},
             "created_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
         }
-        _save(values_table, type_ranking, features_table, meta, paths)
+        _save(values_table, type_ranking, meta, paths)
         result["meta"] = meta
 
     if show:
@@ -474,17 +402,5 @@ def explain_best_model(best_model_name, dataset, params, test_features, feature_
     if show:
         _display_distress_types(type_ranking)
         _display_engineered(engineered)
-
-    if save:
-        plot_shap_beeswarm(
-            explanation, model_name, max_display=max_display,
-            save_path=paths["beeswarm_plot"], show=False,
-        )
-
-    if save:
-        plot_distress_type_reduction(
-            type_ranking, model_name, baseline_pci,
-            save_path=paths["reduction_plot"], show=False,
-        )
 
     return result

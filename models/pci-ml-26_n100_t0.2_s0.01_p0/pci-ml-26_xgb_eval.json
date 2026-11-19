@@ -999,7 +999,7 @@
     76.44171905517578
   ],
   "oof_note": "Prediksi out-of-fold dari proses tuning, bukan prediksi model final yang tersimpan di file model.",
-  "tuning_saved_at": "2026-11-19 | 11:17:06",
+  "tuning_saved_at": "2026-11-19 | 11:43:37",
   "outputs": {
     "cv_score": {
       "mae": 4.872134685516357,
@@ -1050,6 +1050,6 @@
     ],
     "cv_predictions_path": "models/pci-ml-26_n100_t0.2_s0.01_p0/pci-ml-26_xgb_cv_predictions.csv",
     "plot_path": "outputs/figures/n100_t0.2_s0.01_p0/04_performa_oof_xgb.png",
-    "cv_saved_at": "2026-11-19 | 11:17:06"
+    "cv_saved_at": "2026-11-19 | 11:43:37"
   }
 }

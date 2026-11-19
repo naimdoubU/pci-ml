@@ -16,7 +16,7 @@ def figure_path(name, params):
   return ROOT_DIR / 'outputs' / 'figures' / DataSplit.make_tag(params) / name
 
 # Plot distribusi kerusakan pada data train dan test
-def plot_data_dist(train_df, test_df, features):
+def plot_data_dist(train_df, test_df, features, save_path=None):
   sevs = ['L', 'M', 'H', 'No Severity']
   labels = ['Low (L)', 'Medium (M)', 'High (H)', 'No Severity']
   colors = ['#a1c9f4', '#6ca6cd', '#3b7ea1', sns.color_palette('pastel')[1]]
@@ -34,7 +34,7 @@ def plot_data_dist(train_df, test_df, features):
   x = np.arange(len(order))
 
   sns.set_theme(style='whitegrid')
-  _, ax = plt.subplots(figsize=(16, 6.5))
+  fig, ax = plt.subplots(figsize=(16, 6.5))
 
   for df, shift, edge, hatch in [(train.loc[order], -0.205, 'white', None),
                                  (test.loc[order], 0.205, '#444444', '///')]:
@@ -53,6 +53,12 @@ def plot_data_dist(train_df, test_df, features):
   ax.set(xlabel='Jenis Kerusakan', ylabel='Jumlah Segmen',
          title='Distribusi Jenis Kerusakan (Train vs Test)')
   plt.tight_layout()
+
+  if save_path is not None:
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
+
   plt.show()
 
 # Plot performa cross-validation out-of-fold: metrik per fold dan scatter OOF
