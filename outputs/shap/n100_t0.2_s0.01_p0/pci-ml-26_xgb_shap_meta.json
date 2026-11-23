@@ -1,5 +1,5 @@
 {
-  "format_version": 2,
+  "format_version": 3,
   "model": "XGBoost",
   "model_key": "xgb",
   "split_tag": "n100_t0.2_s0.01_p0",
@@ -9,8 +9,7 @@
   "baseline_pci": 99.9449234008789,
   "base_value": 99.94491625349436,
   "ranking_basis": "mean_abs_shap",
-  "direction_note": "arah tanda mean_signed_shap: positif atau negatif",
-  "reduction_note": "mean_pci_reduction_present adalah analisis pendukung",
+  "direction_note": "arah dihitung dari rata-rata SHAP bertanda; nilai bertanda tidak disimpan di artefak tabel",
   "presence_definition": "total nilai mentah distress type > 0",
   "n_explained": 238,
   "n_features": 59,
@@ -28,7 +27,6 @@
       "distress_type": "GATOR_CRACK",
       "mean_abs_shap": 4.829085904093823,
       "share_of_total_contribution": 0.5270503027429592,
-      "mean_signed_shap": -4.8050484865578085,
       "direction": "negatif"
     },
     {
@@ -36,7 +34,6 @@
       "distress_type": "POTHOLES",
       "mean_abs_shap": 2.2711413292879015,
       "share_of_total_contribution": 0.24787418342640835,
-      "mean_signed_shap": -2.247610796533257,
       "direction": "negatif"
     },
     {
@@ -44,7 +41,6 @@
       "distress_type": "LT_CRACK",
       "mean_abs_shap": 0.5012625698156717,
       "share_of_total_contribution": 0.05470819828471012,
-      "mean_signed_shap": 0.48201705217204927,
       "direction": "positif"
     },
     {
@@ -52,7 +48,6 @@
       "distress_type": "RUTTING",
       "mean_abs_shap": 0.4385211852480884,
       "share_of_total_contribution": 0.04786055332920743,
-      "mean_signed_shap": -0.4385211852480884,
       "direction": "negatif"
     },
     {
@@ -60,7 +55,6 @@
       "distress_type": "PATCHING",
       "mean_abs_shap": 0.27835655406297444,
       "share_of_total_contribution": 0.030380057220561554,
-      "mean_signed_shap": -0.1929077307259304,
       "direction": "negatif"
     },
     {
@@ -68,7 +62,6 @@
       "distress_type": "RAVELLING",
       "mean_abs_shap": 0.22887382662009856,
       "share_of_total_contribution": 0.024979472721286852,
-      "mean_signed_shap": -0.08479924840625658,
       "direction": "negatif"
     },
     {
@@ -76,7 +69,6 @@
       "distress_type": "EDGE_CRACK",
       "mean_abs_shap": 0.2148135080542259,
       "share_of_total_contribution": 0.023444918293393274,
-      "mean_signed_shap": 0.19958445126926447,
       "direction": "positif"
     },
     {
@@ -84,7 +76,6 @@
       "distress_type": "LANE_SHOULDER",
       "mean_abs_shap": 0.12454659296904041,
       "share_of_total_contribution": 0.013593114894537092,
-      "mean_signed_shap": 0.12454659296904041,
       "direction": "positif"
     },
     {
@@ -92,7 +83,6 @@
       "distress_type": "BLOCK_CRACK",
       "mean_abs_shap": 0.10876286108469387,
       "share_of_total_contribution": 0.011870465756942268,
-      "mean_signed_shap": 0.06056442963616813,
       "direction": "positif"
     },
     {
@@ -100,15 +90,45 @@
       "distress_type": "POLISH_AGG",
       "mean_abs_shap": 0.08646831882554067,
       "share_of_total_contribution": 0.00943722156113264,
-      "mean_signed_shap": 0.08267922942456202,
       "direction": "positif"
+    }
+  ],
+  "top_engineered_features": [
+    {
+      "rank": 1,
+      "feature": "TOTAL_DENSITY",
+      "mean_abs_shap": 10.19960375562185,
+      "share_of_all_features": 0.3892807810757676,
+      "direction": "negatif"
+    },
+    {
+      "rank": 2,
+      "feature": "TOTAL_H",
+      "mean_abs_shap": 3.441917314581542,
+      "share_of_all_features": 0.13136512875610448,
+      "direction": "negatif"
+    },
+    {
+      "rank": 3,
+      "feature": "TOTAL_M",
+      "mean_abs_shap": 2.4336833907124986,
+      "share_of_all_features": 0.09288460551278775,
+      "direction": "negatif"
+    },
+    {
+      "rank": 4,
+      "feature": "TOTAL_L",
+      "mean_abs_shap": 0.861797809946163,
+      "share_of_all_features": 0.03289160369590991,
+      "direction": "negatif"
     }
   ],
   "paths": {
     "values": "outputs/shap/n100_t0.2_s0.01_p0/pci-ml-26_xgb_shap_values.csv",
     "type_ranking": "outputs/shap/n100_t0.2_s0.01_p0/pci-ml-26_xgb_shap_distress_type_ranking.csv",
     "meta": "outputs/shap/n100_t0.2_s0.01_p0/pci-ml-26_xgb_shap_meta.json",
-    "type_plot": "outputs/figures/n100_t0.2_s0.01_p0/06_shap_distress_type_importance_xgb.png"
+    "type_plot": "outputs/figures/n100_t0.2_s0.01_p0/06_shap_distress_type_importance_xgb.png",
+    "engineered_ranking": "outputs/shap/n100_t0.2_s0.01_p0/pci-ml-26_xgb_shap_engineered_ranking.csv"
   },
-  "created_at": "2026-11-19 | 11:45:20"
+  "created_at": "2026-11-23 | 12:55:11"
 }

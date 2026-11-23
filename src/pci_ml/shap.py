@@ -27,6 +27,23 @@ MODELS = {
     "ann": ("ANN", load_ann, predict_ann),
 }
 ALIASES = {"randomforest": "rf", "xgboost": "xgb"}
+TYPE_EXPORT_COLUMNS = [
+    "rank",
+    "distress_type",
+    "n_severity_columns",
+    "n_present",
+    "presence_rate",
+    "mean_abs_shap",
+    "share_of_total_contribution",
+    "direction",
+]
+ENGINEERED_EXPORT_COLUMNS = [
+    "rank",
+    "feature",
+    "mean_abs_shap",
+    "share_of_all_features",
+    "direction",
+]
 
 
 class _AnnPciModel(torch.nn.Module):
@@ -193,13 +210,14 @@ def engineered_table(values, feature_names):
         "mean_abs_shap": mean_abs_all[indices],
         "mean_signed_shap": mean_signed_all[indices],
     })
-    table["mean_pci_reduction_all"] = -table["mean_signed_shap"]
     table["share_of_all_features"] = table["mean_abs_shap"] / total if total else 0.0
     table["direction"] = table["mean_signed_shap"].map(_direction)
 
-    return table.sort_values(
+    table = table.sort_values(
         ["mean_abs_shap", "feature"], ascending=[False, True]
     ).reset_index(drop=True)
+    table.insert(0, "rank", np.arange(1, len(table) + 1))
+    return table
 
 
 def build_shap_values_table(result, road_info=None, actual=None):
@@ -250,28 +268,26 @@ def show_shap_summary(result):
 def show_shap_tables(type_ranking, engineered):
     rows = [
         [int(row.rank), row.distress_type, f"{row.mean_abs_shap:.4f}",
-         f"{row.share_of_total_contribution:.2%}", f"{row.mean_signed_shap:.4f}",
-         row.direction]
+         f"{row.share_of_total_contribution:.2%}", row.direction]
         for row in type_ranking.itertuples()
     ]
     _display_table(
         "Kontribusi 19 jenis kerusakan",
-        ["Peringkat", "Jenis Kerusakan", "Mean |SHAP|", "Kontribusi", "Mean SHAP", "Arah"],
+        ["Peringkat", "Jenis Kerusakan", "Mean SHAP", "Kontribusi", "Arah"],
         rows,
-        ["center", "left", "center", "center", "center", "left"],
+        ["center", "left", "center", "center", "left"],
     )
 
     rows = [
-        [row.feature, f"{row.mean_abs_shap:.4f}", f"{row.mean_signed_shap:.4f}",
-         f"{row.mean_pci_reduction_all:.4f}", f"{row.share_of_all_features:.2%}",
-         row.direction]
+        [int(row.rank), row.feature, f"{row.mean_abs_shap:.4f}",
+         f"{row.share_of_all_features:.2%}", row.direction]
         for row in engineered.itertuples()
     ]
     _display_table(
         "Fitur agregat hasil rekayasa (dilaporkan terpisah)",
-        ["Fitur", "Mean |SHAP|", "Mean SHAP", "Penurunan PCI", "Share semua fitur", "Arah"],
+        ["Peringkat", "Fitur", "Mean SHAP", "Kontribusi", "Arah"],
         rows,
-        ["left", "center", "center", "center", "center", "left"],
+        ["center", "left", "center", "center", "left"],
     )
 
 
@@ -309,7 +325,7 @@ def plot_distress_type_importance(table, model_name, baseline_pci, save_path=Non
     return fig
 
 
-def save_shap_outputs(result, type_ranking, values_table, dataset, params):
+def save_shap_outputs(result, type_ranking, values_table, dataset, params, engineered=None):
     stem = Path(dataset).stem
     shap_dir = ROOT_DIR / "outputs" / "shap" / DataSplit.make_tag(params)
     model_key = result["model_key"]
@@ -319,8 +335,13 @@ def save_shap_outputs(result, type_ranking, values_table, dataset, params):
         "meta": shap_dir / f"{stem}_{model_key}_shap_meta.json",
         "type_plot": figure_path(f"06_shap_distress_type_importance_{model_key}.png", params),
     }
+    if engineered is not None:
+        paths["engineered_ranking"] = (
+            shap_dir / f"{stem}_{model_key}_shap_engineered_ranking.csv"
+        )
+
     meta = {
-        "format_version": 2,
+        "format_version": 3,
         "model": result["model"],
         "model_key": result["model_key"],
         "split_tag": DataSplit.make_tag(params),
@@ -330,8 +351,10 @@ def save_shap_outputs(result, type_ranking, values_table, dataset, params):
         "baseline_pci": result["baseline_pci"],
         "base_value": result["base_value"],
         "ranking_basis": "mean_abs_shap",
-        "direction_note": "arah tanda mean_signed_shap: positif atau negatif",
-        "reduction_note": "mean_pci_reduction_present adalah analisis pendukung",
+        "direction_note": (
+            "arah dihitung dari rata-rata SHAP bertanda; "
+            "nilai bertanda tidak disimpan di artefak tabel"
+        ),
         "presence_definition": "total nilai mentah distress type > 0",
         "n_explained": int(len(result["values"])),
         "n_features": int(len(result["feature_names"])),
@@ -347,21 +370,37 @@ def save_shap_outputs(result, type_ranking, values_table, dataset, params):
                 "distress_type": row.distress_type,
                 "mean_abs_shap": float(row.mean_abs_shap),
                 "share_of_total_contribution": float(row.share_of_total_contribution),
-                "mean_signed_shap": float(row.mean_signed_shap),
                 "direction": row.direction,
             }
             for row in type_ranking.head(10).itertuples()
         ],
-        "paths": {name: str(path.relative_to(ROOT_DIR).as_posix())
-                  for name, path in paths.items()},
-        "created_at": datetime.now().strftime("%Y-%m-%d | %H:%M:%S"),
     }
+    if engineered is not None:
+        meta["top_engineered_features"] = [
+            {
+                "rank": int(row.rank),
+                "feature": row.feature,
+                "mean_abs_shap": float(row.mean_abs_shap),
+                "share_of_all_features": float(row.share_of_all_features),
+                "direction": row.direction,
+            }
+            for row in engineered.itertuples()
+        ]
+    meta["paths"] = {
+        name: str(path.relative_to(ROOT_DIR).as_posix())
+        for name, path in paths.items()
+    }
+    meta["created_at"] = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
 
-    for path in (paths["values"], paths["type_ranking"], paths["meta"]):
+    for path in paths.values():
         path.parent.mkdir(parents=True, exist_ok=True)
 
     values_table.to_csv(paths["values"], index=False)
-    type_ranking.to_csv(paths["type_ranking"], index=False)
+    type_ranking[TYPE_EXPORT_COLUMNS].to_csv(paths["type_ranking"], index=False)
+    if engineered is not None:
+        engineered[ENGINEERED_EXPORT_COLUMNS].to_csv(
+            paths["engineered_ranking"], index=False
+        )
     with open(paths["meta"], "w", encoding="utf-8") as file:
         json.dump(meta, file, indent=2, ensure_ascii=False, default=str)
     return paths
