@@ -273,7 +273,7 @@ def show_shap_tables(type_ranking, engineered):
     ]
     _display_table(
         "Kontribusi 19 jenis kerusakan",
-        ["Peringkat", "Jenis Kerusakan", "Mean SHAP", "Kontribusi", "Arah"],
+        ["Peringkat", "Jenis Kerusakan", "Mean |SHAP|", "Kontribusi", "Arah"],
         rows,
         ["center", "left", "center", "center", "left"],
     )
@@ -285,7 +285,7 @@ def show_shap_tables(type_ranking, engineered):
     ]
     _display_table(
         "Fitur agregat hasil rekayasa (dilaporkan terpisah)",
-        ["Peringkat", "Fitur", "Mean SHAP", "Kontribusi", "Arah"],
+        ["Peringkat", "Fitur", "Mean |SHAP|", "Kontribusi", "Arah"],
         rows,
         ["center", "left", "center", "center", "left"],
     )
