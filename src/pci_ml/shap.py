@@ -14,8 +14,7 @@ from IPython.display import HTML, Markdown, display
 
 from pci_ml.ann import load_ann, predict_ann
 from pci_ml.data import DataSplit, ENGINEERED_FEATURES, LEVEL_SUFFIXES
-from pci_ml.evaluation import ROOT_DIR
-from pci_ml.plots import figure_path
+from pci_ml.paths import ROOT_DIR, figure_path, shap_output_dir
 from pci_ml.random_forest import load_rf, predict_rf
 from pci_ml.ui import format_table
 from pci_ml.xgboost import load_xgb, predict_xgb
@@ -327,13 +326,15 @@ def plot_distress_type_importance(table, model_name, baseline_pci, save_path=Non
 
 def save_shap_outputs(result, type_ranking, values_table, dataset, params, engineered=None):
     stem = Path(dataset).stem
-    shap_dir = ROOT_DIR / "outputs" / "shap" / DataSplit.make_tag(params)
+    shap_dir = shap_output_dir(dataset, params)
     model_key = result["model_key"]
     paths = {
         "values": shap_dir / f"{stem}_{model_key}_shap_values.csv",
         "type_ranking": shap_dir / f"{stem}_{model_key}_shap_distress_type_ranking.csv",
         "meta": shap_dir / f"{stem}_{model_key}_shap_meta.json",
-        "type_plot": figure_path(f"06_shap_distress_type_importance_{model_key}.png", params),
+        "type_plot": figure_path(
+            f"06_shap_distress_type_importance_{model_key}.png", dataset, params
+        ),
     }
     if engineered is not None:
         paths["engineered_ranking"] = (

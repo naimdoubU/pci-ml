@@ -6,14 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from pci_ml.data import DataSplit
 from pci_ml.model import score_prediction
-
-ROOT_DIR = Path(__file__).resolve().parents[2]
-
-# Path gambar output untuk satu kombinasi dataset dan parameter split
-def figure_path(name, params):
-  return ROOT_DIR / 'outputs' / 'figures' / DataSplit.make_tag(params) / name
 
 # Plot distribusi kerusakan pada data train dan test
 def plot_data_dist(train_df, test_df, features, save_path=None):

@@ -6,8 +6,8 @@ import numpy as np
 
 from pci_ml.data import DataSplit
 from pci_ml.model import score_prediction
+from pci_ml.paths import ROOT_DIR, test_predictions_path
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
 models_dir = ROOT_DIR / "models"
 
 # Ekstensi file model asli tiap algoritma
@@ -33,11 +33,6 @@ def eval_path(model, filename, params):
 # Path tabel nilai prediksi out-of-fold khusus data CV
 def cv_predictions_path(model, filename, params):
     return model_dir(filename, params) / f"{Path(filename).stem}_{model}_cv_predictions.csv"
-
-
-# Folder hasil prediksi test
-def test_predictions_dir(params):
-    return ROOT_DIR / "outputs" / "predictions" / DataSplit.make_tag(params)
 
 
 # Hitung metrik CV: skor gabungan OOF, rata-rata per fold, dan metrik tiap fold
@@ -147,11 +142,10 @@ def save_cv_outputs(model, filename, params, metrics, cv_predictions, plot_path)
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
 
-# Simpan prediksi test per model ke outputs/predictions/<tag>/
+# Simpan prediksi test per model ke outputs/<dataset>_<tag>/predictions/
 def save_test_predictions(model, filename, params, predictions, actual, road_info):
-    dir_path = test_predictions_dir(params)
-    dir_path.mkdir(parents=True, exist_ok=True)
-    path = dir_path / f"{Path(filename).stem}_{model}_test_predictions.csv"
+    path = test_predictions_path(model, filename, params)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     table = road_info.copy()
     table.insert(0, "row_index", range(len(table)))
